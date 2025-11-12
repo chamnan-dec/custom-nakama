@@ -46,9 +46,13 @@ const (
 var controlCharsRegex = regexp.MustCompilePOSIX("[[:cntrl:]]+")
 
 func (p *Pipeline) channelJoin(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
+	db, err := GetDB("region_a")
+	if err != nil {
+		return false, nil
+	}
 	incoming := envelope.GetChannelJoin()
 
-	channelID, stream, err := BuildChannelId(session.Context(), logger, p.db, session.UserID(), incoming.Target, rtapi.ChannelJoin_Type(incoming.Type))
+	channelID, stream, err := BuildChannelId(session.Context(), logger, db, session.UserID(), incoming.Target, rtapi.ChannelJoin_Type(incoming.Type))
 	if err != nil {
 		if errors.Is(err, runtime.ErrInvalidChannelTarget) || errors.Is(err, runtime.ErrInvalidChannelType) {
 			_ = session.Send(&rtapi.Envelope{Cid: envelope.Cid, Message: &rtapi.Envelope_Error{Error: &rtapi.Error{
@@ -120,7 +124,7 @@ func (p *Pipeline) channelJoin(logger *zap.Logger, session Session, envelope *rt
 				}
 
 				// Any error is already logged before it's returned here.
-				_ = NotificationSend(session.Context(), logger, p.db, p.tracker, p.router, notifications)
+				_ = NotificationSend(session.Context(), logger, db, p.tracker, p.router, notifications)
 			}
 		}
 	}
@@ -187,6 +191,10 @@ func (p *Pipeline) channelLeave(logger *zap.Logger, session Session, envelope *r
 }
 
 func (p *Pipeline) channelMessageSend(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
+	db, err := GetDB("region_a")
+	if err != nil {
+		return false, nil
+	}
 	incoming := envelope.GetChannelMessageSend()
 
 	streamConversionResult, err := ChannelIdToStream(incoming.ChannelId)
@@ -215,7 +223,7 @@ func (p *Pipeline) channelMessageSend(logger *zap.Logger, session Session, envel
 		return false, nil
 	}
 
-	ack, err := ChannelMessageSend(session.Context(), p.logger, p.db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.Content, session.UserID().String(), session.Username(), meta.Persistence)
+	ack, err := ChannelMessageSend(session.Context(), p.logger, db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.Content, session.UserID().String(), session.Username(), meta.Persistence)
 	switch err {
 	case errChannelMessagePersist:
 		_ = session.Send(&rtapi.Envelope{Cid: envelope.Cid, Message: &rtapi.Envelope_Error{Error: &rtapi.Error{
@@ -232,6 +240,10 @@ func (p *Pipeline) channelMessageSend(logger *zap.Logger, session Session, envel
 }
 
 func (p *Pipeline) channelMessageUpdate(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
+	db, err := GetDB("region_a")
+	if err != nil {
+		return false, nil
+	}
 	incoming := envelope.GetChannelMessageUpdate()
 
 	if _, err := uuid.FromString(incoming.MessageId); err != nil {
@@ -268,7 +280,7 @@ func (p *Pipeline) channelMessageUpdate(logger *zap.Logger, session Session, env
 		return false, nil
 	}
 
-	ack, err := ChannelMessageUpdate(session.Context(), p.logger, p.db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.MessageId, incoming.Content, session.UserID().String(), session.Username(), meta.Persistence)
+	ack, err := ChannelMessageUpdate(session.Context(), p.logger, db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.MessageId, incoming.Content, session.UserID().String(), session.Username(), meta.Persistence)
 	switch err {
 	case errChannelMessageNotFound:
 		_ = session.Send(&rtapi.Envelope{Cid: envelope.Cid, Message: &rtapi.Envelope_Error{Error: &rtapi.Error{
@@ -290,6 +302,10 @@ func (p *Pipeline) channelMessageUpdate(logger *zap.Logger, session Session, env
 }
 
 func (p *Pipeline) channelMessageRemove(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
+	db, err := GetDB("region_a")
+	if err != nil {
+		return false, nil
+	}
 	incoming := envelope.GetChannelMessageRemove()
 
 	if _, err := uuid.FromString(incoming.MessageId); err != nil {
@@ -318,7 +334,7 @@ func (p *Pipeline) channelMessageRemove(logger *zap.Logger, session Session, env
 		return false, nil
 	}
 
-	ack, err := ChannelMessageRemove(session.Context(), p.logger, p.db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.MessageId, session.UserID().String(), session.Username(), meta.Persistence)
+	ack, err := ChannelMessageRemove(session.Context(), p.logger, db, p.router, streamConversionResult.Stream, incoming.ChannelId, incoming.MessageId, session.UserID().String(), session.Username(), meta.Persistence)
 	switch err {
 	case errChannelMessageNotFound:
 		_ = session.Send(&rtapi.Envelope{Cid: envelope.Cid, Message: &rtapi.Envelope_Error{Error: &rtapi.Error{

@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,8 +50,19 @@ var (
 	}
 )
 
+var dbConfigs = map[string]string{
+	"region_a": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
+	"region_b": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
+}
+
 func main() {
 	defer os.Exit(0)
+
+	for key, url := range dbConfigs {
+		if err := server.SetupPool(key, url); err != nil {
+			log.Fatalf("setup pool for %s failed: %v", key, err)
+		}
+	}
 
 	semver := fmt.Sprintf("%s+%s", version, commitID)
 	// Always set default timeout on HTTP client.
@@ -66,24 +78,6 @@ func main() {
 	startupLogger.Info("Nakama starting")
 	startupLogger.Info("Node", zap.String("name", config.GetName()), zap.String("version", semver), zap.String("runtime", runtime.Version()), zap.Int("cpu", runtime.NumCPU()), zap.Int("proc", runtime.GOMAXPROCS(0)))
 	startupLogger.Info("Data directory", zap.String("path", config.GetDataDir()))
-
-	// db := server.DbConnect(ctx, startupLogger, config, false)
-
-	// // Check migration status and fail fast if the schema has diverged.
-	// conn, err := db.Conn(context.Background())
-	// if err != nil {
-	// 	logger.Fatal("Failed to acquire db conn for migration check", zap.Error(err))
-	// }
-
-	// if err = conn.Raw(func(driverConn any) error {
-	// 	pgxConn := driverConn.(*stdlib.Conn).Conn()
-	// 	migrate.Check(ctx, startupLogger, pgxConn)
-	// 	return nil
-	// }); err != nil {
-	// 	conn.Close()
-	// 	logger.Fatal("Failed to acquire pgx conn for migration check", zap.Error(err))
-	// }
-	// conn.Close()
 
 	// Start up server components.
 	metrics := server.NewLocalMetrics(logger, startupLogger, config)
@@ -120,6 +114,7 @@ func main() {
 	sessionCache.Stop()
 	sessionRegistry.Stop()
 	metrics.Stop(logger)
+	server.CloseAllDbConnection()
 
 	startupLogger.Info("Shutdown complete")
 }

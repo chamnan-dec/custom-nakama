@@ -174,7 +174,6 @@ func (s *sessionWS) Expiry() int64 {
 
 func (s *sessionWS) Consume() {
 	// Fire an event for session start.
-
 	s.conn.SetReadLimit(s.config.GetSocket().MaxMessageSizeBytes)
 	if err := s.conn.SetReadDeadline(time.Now().Add(s.pongWaitDuration)); err != nil {
 		s.logger.Warn("Failed to set initial read deadline", zap.Error(err))

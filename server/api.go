@@ -337,12 +337,50 @@ func securityInterceptorFunc(logger *zap.Logger, config Config, sessionCache Ses
 		return ctx, nil
 	case "/nakama.api.Nakama/SessionRefresh":
 		fallthrough
+	case "/nakama.api.Nakama/AuthenticateApple":
+		fallthrough
 	case "/nakama.api.Nakama/AuthenticateCustom":
 		fallthrough
 	case "/nakama.api.Nakama/AuthenticateDevice":
 		fallthrough
 	case "/nakama.api.Nakama/AuthenticateEmail":
 		fallthrough
+	case "/nakama.api.Nakama/AuthenticateFacebook":
+		fallthrough
+	case "/nakama.api.Nakama/AuthenticateFacebookInstantGame":
+		fallthrough
+	case "/nakama.api.Nakama/AuthenticateGameCenter":
+		fallthrough
+	case "/nakama.api.Nakama/AuthenticateGoogle":
+		fallthrough
+	case "/nakama.api.Nakama/AuthenticateSteam":
+		// Session refresh and authentication functions only require server key.
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			logger.Error("Cannot extract metadata from incoming context")
+			return nil, status.Error(codes.FailedPrecondition, "Cannot extract metadata from incoming context")
+		}
+		auth, ok := md["authorization"]
+		if !ok {
+			auth, ok = md["grpcgateway-authorization"]
+		}
+		if !ok {
+			// Neither "authorization" nor "grpc-authorization" were supplied.
+			return nil, status.Error(codes.Unauthenticated, "Server key required")
+		}
+		if len(auth) != 1 {
+			// Value of "authorization" or "grpc-authorization" was empty or repeated.
+			return nil, status.Error(codes.Unauthenticated, "Server key required")
+		}
+		username, _, ok := parseBasicAuth(auth[0])
+		if !ok {
+			// Value of "authorization" or "grpc-authorization" was malformed.
+			return nil, status.Error(codes.Unauthenticated, "Server key invalid")
+		}
+		if username != config.GetSocket().ServerKey {
+			// Value of "authorization" or "grpc-authorization" username component did not match server key.
+			return nil, status.Error(codes.Unauthenticated, "Server key invalid")
+		}
 	case "/nakama.api.Nakama/RpcFunc":
 		// RPC allows full user authentication or HTTP key authentication.
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -365,6 +403,10 @@ func securityInterceptorFunc(logger *zap.Logger, config Config, sessionCache Ses
 				// HTTP key not present.
 				return nil, status.Error(codes.Unauthenticated, "Auth token or HTTP key required")
 			}
+			// if in.HttpKey != config.GetRuntime().HTTPKey {
+			// 	// Value of HTTP key username component did not match.
+			// 	return nil, status.Error(codes.Unauthenticated, "HTTP key invalid")
+			// }
 			return ctx, nil
 		}
 		if len(auth) != 1 {

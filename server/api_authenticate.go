@@ -15,11 +15,16 @@
 package server
 
 import (
+	"context"
 	"math/rand"
 	"regexp"
 	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/heroiclabs/nakama-common/api"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -130,79 +135,49 @@ func (s *SessionTokenClaims) GetSubject() (string, error) {
 // 	return session, nil
 // }
 
-// func (s *ApiServer) AuthenticateDevice(ctx context.Context, in *api.AuthenticateDeviceRequest) (*api.Session, error) {
-// 	// Before hook.
-// 	if fn := s.runtime.BeforeAuthenticateDevice(); fn != nil {
-// 		beforeFn := func(clientIP, clientPort string) error {
-// 			result, err, code := fn(ctx, s.logger, "", "", nil, 0, clientIP, clientPort, in)
-// 			if err != nil {
-// 				return status.Error(code, err.Error())
-// 			}
-// 			if result == nil {
-// 				// If result is nil, requested resource is disabled.
-// 				s.logger.Warn("Intercepted a disabled resource.", zap.Any("resource", ctx.Value(ctxFullMethodKey{}).(string)))
-// 				return status.Error(codes.NotFound, "Requested resource was not found.")
-// 			}
-// 			in = result
-// 			return nil
-// 		}
+func (s *ApiServer) AuthenticateDevice(ctx context.Context, in *api.AuthenticateDeviceRequest) (*api.Session, error) {
+	db, err := GetDB("region_a")
+	if err != nil {
+		return nil, err
+	}
+	if in.Account == nil || in.Account.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "Device ID is required.")
+	} else if invalidCharsRegex.MatchString(in.Account.Id) {
+		return nil, status.Error(codes.InvalidArgument, "Device ID invalid, no spaces or control characters allowed.")
+	} else if len(in.Account.Id) < 10 || len(in.Account.Id) > 128 {
+		return nil, status.Error(codes.InvalidArgument, "Device ID invalid, must be 10-128 bytes.")
+	}
 
-// 		// Execute the before function lambda wrapped in a trace for stats measurement.
-// 		err := traceApiBefore(ctx, s.logger, s.metrics, ctx.Value(ctxFullMethodKey{}).(string), beforeFn)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
+	username := in.Username
+	if username == "" {
+		username = generateUsername()
+	} else if invalidUsernameRegex.MatchString(username) {
+		return nil, status.Error(codes.InvalidArgument, "Username invalid, no spaces or control characters allowed.")
+	} else if len(username) > 128 {
+		return nil, status.Error(codes.InvalidArgument, "Username invalid, must be 1-128 bytes.")
+	}
 
-// 	if in.Account == nil || in.Account.Id == "" {
-// 		return nil, status.Error(codes.InvalidArgument, "Device ID is required.")
-// 	} else if invalidCharsRegex.MatchString(in.Account.Id) {
-// 		return nil, status.Error(codes.InvalidArgument, "Device ID invalid, no spaces or control characters allowed.")
-// 	} else if len(in.Account.Id) < 10 || len(in.Account.Id) > 128 {
-// 		return nil, status.Error(codes.InvalidArgument, "Device ID invalid, must be 10-128 bytes.")
-// 	}
+	create := in.Create == nil || in.Create.Value
 
-// 	username := in.Username
-// 	if username == "" {
-// 		username = generateUsername()
-// 	} else if invalidUsernameRegex.MatchString(username) {
-// 		return nil, status.Error(codes.InvalidArgument, "Username invalid, no spaces or control characters allowed.")
-// 	} else if len(username) > 128 {
-// 		return nil, status.Error(codes.InvalidArgument, "Username invalid, must be 1-128 bytes.")
-// 	}
+	// Connect to DB?, Schema?
+	dbUserID, dbUsername, created, err := AuthenticateDevice(ctx, s.logger, db, in.Account.Id, username, create)
+	if err != nil {
+		return nil, err
+	}
 
-// 	create := in.Create == nil || in.Create.Value
+	if s.config.GetSession().SingleSession {
+		s.sessionCache.RemoveAll(uuid.Must(uuid.FromString(dbUserID)))
+	}
 
-// 	dbUserID, dbUsername, created, err := AuthenticateDevice(ctx, s.logger, s.db, in.Account.Id, username, create)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	tokenID := uuid.Must(uuid.NewV4()).String()
+	tokenIssuedAt := time.Now().Unix()
+	token, exp := generateToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
+	refreshToken, refreshExp := generateRefreshToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
+	s.sessionCache.Add(uuid.FromStringOrNil(dbUserID), exp, tokenID, refreshExp, tokenID)
+	session := &api.Session{Created: created, Token: token, RefreshToken: refreshToken}
 
-// 	if s.config.GetSession().SingleSession {
-// 		s.sessionCache.RemoveAll(uuid.Must(uuid.FromString(dbUserID)))
-// 	}
-
-// 	tokenID := uuid.Must(uuid.NewV4()).String()
-// 	tokenIssuedAt := time.Now().Unix()
-// 	token, exp := generateToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
-// 	refreshToken, refreshExp := generateRefreshToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
-// 	s.sessionCache.Add(uuid.FromStringOrNil(dbUserID), exp, tokenID, refreshExp, tokenID)
-// 	session := &api.Session{Created: created, Token: token, RefreshToken: refreshToken}
-
-// 	// After hook.
-// 	if fn := s.runtime.AfterAuthenticateDevice(); fn != nil {
-// 		afterFn := func(clientIP, clientPort string) error {
-// 			uid := uuid.Must(uuid.FromString(dbUserID))
-// 			ctx = populateCtx(ctx, uid, dbUsername, tokenID, in.Account.Vars, exp, tokenIssuedAt)
-// 			return fn(ctx, s.logger, dbUserID, dbUsername, in.Account.Vars, exp, clientIP, clientPort, session, in)
-// 		}
-
-// 		// Execute the after function lambda wrapped in a trace for stats measurement.
-// 		traceApiAfter(ctx, s.logger, s.metrics, ctx.Value(ctxFullMethodKey{}).(string), afterFn)
-// 	}
-
-// 	return session, nil
-// }
+	return session, nil
+}
 
 // func (s *ApiServer) AuthenticateEmail(ctx context.Context, in *api.AuthenticateEmailRequest) (*api.Session, error) {
 // 	// Before hook.
