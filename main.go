@@ -26,6 +26,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Blank import to register SQL driver
+	"github.com/joho/godotenv"
 	"github.com/thaibev/nakama/v3/server"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -53,6 +54,13 @@ var (
 var dbConfigs = map[string]string{
 	"region_a": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
 	"region_b": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
+}
+
+func init() {
+	// Load .env file (ignore error if file doesn't exist in production)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
 }
 
 func main() {

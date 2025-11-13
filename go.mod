@@ -14,6 +14,7 @@ require (
 	github.com/heroiclabs/nakama/v3 v3.34.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/joho/godotenv v1.5.1
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/uber-go/tally/v4 v4.1.17
 	go.uber.org/atomic v1.11.0
