@@ -53,5 +53,40 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  nakama:
+    container_name: custom-nakama-server
+    build:
+      context: .
+      dockerfile: dockerfile
+    image: nakama-custom:latest
+    pull_policy: never
+    ports:
+      - "7349:7349"  
+      - "7350:7350"
+      - "7351:7351"
+    expose:
+      - "7349"
+      - "7350"
+      - "7351"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    environment:
+      # Database connection for multi-region pool in main.go
+      - DB_HOST=pgbouncer
+      - DB_PORT=5432
+      - DB_SSLMODE=disable
+      # Nakama config overrides
+      - NAKAMA_DATABASE__ADDRESS=postgres:localdb@pgbouncer:5432/custom-nakama?sslmode=disable
+      - NAKAMA_LOGGER__LEVEL=info
+      - NAKAMA_SOCKET__PORT=7350
+      - NAKAMA_SESSION__TOKEN_EXPIRY_SEC=60
+    healthcheck:
+      test: ["CMD", "/nakama/custom-nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   data:
