@@ -88,9 +88,15 @@ func main() {
 	router := server.NewLocalMessageRouter(sessionRegistry, tracker, jsonpbMarshaler)
 	streamManager := server.NewLocalStreamManager(config, sessionRegistry, tracker)
 
+	// Initialize presign service
+	presignService, err := server.NewPresignServiceFromEnv()
+	if err != nil {
+		logger.Fatal("Failed to initialize presign service", zap.Error(err))
+	}
+
 	pipeline := server.NewPipeline(logger, config, jsonpbMarshaler, jsonpbUnmarshaler, sessionRegistry, statusRegistry, tracker, router)
 
-	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline)
+	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline, presignService)
 
 	// Respect OS stop signals.
 	c := make(chan os.Signal, 2)
