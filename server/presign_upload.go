@@ -39,16 +39,15 @@ type presignUploadRequest struct {
 	Filename    string `json:"filename,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	PathPrefix  string `json:"path_prefix,omitempty"`
-	ContentMD5  string `json:"content_md5,omitempty"`
+	ChatID      string `json:"chat_id,omitempty"`
 }
 
 type presignUploadResponse struct {
-	Method    string            `json:"method"`
-	URL       string            `json:"url"`
+	UploadURL string            `json:"upload_url"`
 	Headers   map[string]string `json:"headers,omitempty"`
 	ObjectKey string            `json:"object_key"`
 	ExpiresIn int64             `json:"expires_in"`
-	PublicURL string            `json:"public_url,omitempty"`
+	//PublicURL string            `json:"public_url,omitempty"`
 }
 
 // NewPresignServiceFromEnv initializes MinIO client from environment variables.
@@ -105,7 +104,7 @@ func NewPresignServiceFromEnv() (*PresignService, error) {
 	}, nil
 }
 
-// PresignUploadHandler returns a presigned PUT URL for direct upload to MinIO.
+// PresignUploadHandler returns a presigned PUT UploadURL for direct upload to MinIO.
 func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -128,17 +127,22 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 		// Object key: optional prefix + date + UUID + original filename
 		u := uuid.New().String()
 		datePrefix := time.Now().UTC().Format("2006/01/02")
-		keyParts := []string{}
+		var keyParts []string
 		if p := strings.Trim(req.PathPrefix, "/"); p != "" {
 			keyParts = append(keyParts, p)
 		}
 		keyParts = append(keyParts, datePrefix, u+"-"+filename)
+
+		if cid := sanitizeID(req.ChatID); cid != "" {
+			keyParts = append(keyParts, "chats", cid)
+		}
+
 		objectKey := path.Clean(strings.Join(keyParts, "/"))
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		// Generate presigned PUT URL.
+		// Generate presigned PUT UploadURL.
 		url, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, s.expiry)
 		if err != nil {
 			http.Error(w, "failed to presign", http.StatusInternalServerError)
@@ -150,17 +154,13 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 		if ct := strings.TrimSpace(req.ContentType); ct != "" {
 			headers["Content-Type"] = ct
 		}
-		if md5 := strings.TrimSpace(req.ContentMD5); md5 != "" {
-			headers["Content-MD5"] = md5
-		}
 
 		resp := presignUploadResponse{
-			Method:    "PUT",
-			URL:       url.String(),
+			UploadURL: url.String(),
 			Headers:   headers,
 			ObjectKey: objectKey,
 			ExpiresIn: int64(s.expiry.Seconds()),
-			PublicURL: s.buildPublicURL(objectKey),
+			//PublicURL: s.buildPublicURL(objectKey),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -168,20 +168,36 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 	}
 }
 
-func (s *PresignService) buildPublicURL(objectKey string) string {
-	if s.publicBaseURL == "" {
-		return ""
-	}
-	// If base URL already includes the bucket, don't duplicate it.
-	base := s.publicBaseURL
-	if strings.Contains(strings.TrimRight(base, "/")+"/", "/"+s.bucket+"/") {
-		return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(objectKey, "/")
-	}
-	return strings.TrimRight(base, "/") + "/" + s.bucket + "/" + strings.TrimLeft(objectKey, "/")
-}
+// TODO : enable if public url is needed
+//func (s *PresignService) buildPublicURL(objectKey string) string {
+//	if s.publicBaseURL == "" {
+//		return ""
+//	}
+//	// If base UploadURL already includes the bucket, don't duplicate it.
+//	base := s.publicBaseURL
+//	if strings.Contains(strings.TrimRight(base, "/")+"/", "/"+s.bucket+"/") {
+//		return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(objectKey, "/")
+//	}
+//	return strings.TrimRight(base, "/") + "/" + s.bucket + "/" + strings.TrimLeft(objectKey, "/")
+//}
 
 func fastRandHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// allow only alphanumeric, dash, underscore
+func sanitizeID(s string) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
