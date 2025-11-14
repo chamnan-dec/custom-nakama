@@ -40,7 +40,7 @@ type presignUploadRequest struct {
 	Filename    string `json:"filename,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	PathPrefix  string `json:"path_prefix,omitempty"`
-	ChatID      string `json:"chat_id,omitempty"`
+	ChannelID   string `json:"channel_id,omitempty"`
 }
 
 type presignUploadResponse struct {
@@ -48,14 +48,8 @@ type presignUploadResponse struct {
 	Headers   map[string]string `json:"headers,omitempty"`
 	ObjectKey string            `json:"object_key"`
 	ExpiresIn int64             `json:"expires_in"`
+	ChannelID string            `json:"channel_id"`
 	//PublicURL string            `json:"public_url,omitempty"`
-}
-
-type presignGetRequest struct {
-	ChannelID   string `json:"channel_id,omitempty"`
-	ObjectKey   string `json:"object_key"`
-	ContentType string `json:"content_type,omitempty"`
-	PathPrefix  string `json:"path_prefix,omitempty"`
 }
 
 type presignGetResponse struct {
@@ -125,15 +119,20 @@ func (s *PresignService) GetPresignHandler() http.HandlerFunc {
 			return
 		}
 
-		var req presignGetRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		channelID := r.URL.Query().Get("channel_id")
+		if channelID == "" {
+			http.Error(w, "channel_id required", http.StatusBadRequest)
+			return
+		}
+		objectKey := r.URL.Query().Get("object_key")
+		if objectKey == "" {
+			http.Error(w, "object_key required", http.StatusBadRequest)
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, fmt.Sprintf("%s/%s", req.ChannelID, req.ObjectKey), s.expiry, nil)
+		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, fmt.Sprintf("chats/%s/%s", channelID, objectKey), s.expiry, nil)
 		if err != nil {
 			http.Error(w, "could not generate presigned URL", http.StatusBadRequest)
 			return
@@ -141,9 +140,6 @@ func (s *PresignService) GetPresignHandler() http.HandlerFunc {
 
 		// Suggested headers for the upload request (client-side).
 		headers := map[string]string{}
-		if ct := strings.TrimSpace(req.ContentType); ct != "" {
-			headers["Content-Type"] = ct
-		}
 
 		resp := presignGetResponse{
 			Method:     "GET",
@@ -180,22 +176,24 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 		u := uuid.New().String()
 		datePrefix := time.Now().UTC().Format("2006/01/02")
 		var keyParts []string
+
 		if p := strings.Trim(req.PathPrefix, "/"); p != "" {
 			keyParts = append(keyParts, p)
 		}
 		keyParts = append(keyParts, datePrefix, u+"-"+filename)
 
-		if cid := sanitizeID(req.ChatID); cid != "" {
-			keyParts = append(keyParts, "chats", cid)
-		}
-
 		objectKey := path.Clean(strings.Join(keyParts, "/"))
+
+		objectInnerKey := objectKey
+		if cid := sanitizeID(req.ChannelID); cid != "" {
+			objectInnerKey = fmt.Sprintf("chats/%s/%s", cid, objectKey)
+		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
 		// Generate presigned PUT UploadURL.
-		url, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, s.expiry)
+		url, err := s.client.PresignedPutObject(ctx, s.bucket, objectInnerKey, s.expiry)
 		if err != nil {
 			http.Error(w, "failed to presign", http.StatusInternalServerError)
 			return
@@ -212,6 +210,7 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 			Headers:   headers,
 			ObjectKey: objectKey,
 			ExpiresIn: int64(s.expiry.Seconds()),
+			ChannelID: req.ChannelID,
 			//PublicURL: s.buildPublicURL(objectKey),
 		}
 
