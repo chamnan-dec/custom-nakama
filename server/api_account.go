@@ -18,20 +18,25 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (s *ApiServer) GetAccount(ctx context.Context, in *emptypb.Empty) (*api.Account, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	account, err := GetAccount(ctx, s.logger, db, s.statusRegistry, userID)
 	if err != nil {
@@ -48,11 +53,15 @@ func (s *ApiServer) GetAccount(ctx context.Context, in *emptypb.Empty) (*api.Acc
 }
 
 func (s *ApiServer) DeleteAccount(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := DeleteAccount(ctx, s.logger, db, s.config, s.sessionRegistry, s.sessionCache, s.tracker, userID, false); err != nil {
 		if errors.Is(err, ErrAccountNotFound) {
@@ -65,11 +74,15 @@ func (s *ApiServer) DeleteAccount(ctx context.Context, in *emptypb.Empty) (*empt
 }
 
 func (s *ApiServer) UpdateAccount(ctx context.Context, in *api.UpdateAccountRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	username := in.GetUsername().GetValue()
 	if in.GetUsername() != nil {

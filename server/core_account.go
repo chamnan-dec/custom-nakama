@@ -23,6 +23,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
+	"github.com/thaibev/nakama/v3/internal/config"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -361,7 +362,7 @@ func updateAccounts(ctx context.Context, logger *zap.Logger, tx pgx.Tx, updates 
 	return nil
 }
 
-func DeleteAccount(ctx context.Context, logger *zap.Logger, db *sql.DB, config Config, sessionRegistry SessionRegistry, sessionCache SessionCache, tracker Tracker, userID uuid.UUID, recorded bool) error {
+func DeleteAccount(ctx context.Context, logger *zap.Logger, db *sql.DB, config config.Config, sessionRegistry SessionRegistry, sessionCache SessionCache, tracker Tracker, userID uuid.UUID, recorded bool) error {
 	if userID == uuid.Nil {
 		return errors.New("cannot delete the system user")
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 )
 
@@ -45,7 +46,7 @@ const maxIdleConns = 100
 
 var dbUrls = [...]string{"postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app", "12321"}
 
-func DbConnect(ctx context.Context, logger *zap.Logger, config Config, create bool) *sql.DB {
+func DbConnect(ctx context.Context, logger *zap.Logger, config config.Config, create bool) *sql.DB {
 	rawURL := dbUrls[0]
 	if !(strings.HasPrefix(rawURL, "postgresql://") || strings.HasPrefix(rawURL, "postgres://")) {
 		rawURL = fmt.Sprintf("postgres://%s", rawURL)

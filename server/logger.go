@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
@@ -33,7 +34,7 @@ const (
 	StackdriverFormat
 )
 
-func SetupLogging(tmpLogger *zap.Logger, config Config) (*zap.Logger, *zap.Logger) {
+func SetupLogging(tmpLogger *zap.Logger, config config.Config) (*zap.Logger, *zap.Logger) {
 	zapLevel := zapcore.InfoLevel
 	switch strings.ToLower(config.GetLogger().Level) {
 	case "debug":
@@ -95,7 +96,7 @@ func NewJSONFileLogger(consoleLogger *zap.Logger, fileName string, level zapcore
 	return NewJSONLogger(output, level, format)
 }
 
-func NewRotatingJSONFileLogger(consoleLogger *zap.Logger, config Config, level zapcore.Level, format LoggingFormat) *zap.Logger {
+func NewRotatingJSONFileLogger(consoleLogger *zap.Logger, config config.Config, level zapcore.Level, format LoggingFormat) *zap.Logger {
 	fileName := config.GetLogger().File
 	if len(fileName) == 0 {
 		consoleLogger.Fatal("Rotating log file is enabled but log file name is empty")

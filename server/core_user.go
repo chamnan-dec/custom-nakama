@@ -22,6 +22,7 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -162,7 +163,7 @@ func DeleteUser(ctx context.Context, tx *sql.Tx, userID uuid.UUID) (int64, error
 	return res.RowsAffected()
 }
 
-func BanUsers(ctx context.Context, logger *zap.Logger, db *sql.DB, config Config, sessionCache SessionCache, sessionRegistry SessionRegistry, tracker Tracker, ids []uuid.UUID) error {
+func BanUsers(ctx context.Context, logger *zap.Logger, db *sql.DB, config config.Config, sessionCache SessionCache, sessionRegistry SessionRegistry, tracker Tracker, ids []uuid.UUID) error {
 	query := "UPDATE users SET disable_time = now() WHERE id = ANY($1::UUID[])"
 	_, err := db.ExecContext(ctx, query, ids)
 	if err != nil {

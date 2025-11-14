@@ -22,11 +22,12 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/websocket"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func NewSocketWsAcceptor(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, sessionCache SessionCache, statusRegistry StatusRegistry, tracker Tracker, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, pipeline *Pipeline) func(http.ResponseWriter, *http.Request) {
+func NewSocketWsAcceptor(logger *zap.Logger, config config.Config, sessionRegistry SessionRegistry, sessionCache SessionCache, statusRegistry StatusRegistry, tracker Tracker, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, pipeline *Pipeline) func(http.ResponseWriter, *http.Request) {
 	upgrader := &websocket.Upgrader{
 		ReadBufferSize:  config.GetSocket().ReadBufferSizeBytes,
 		WriteBufferSize: config.GetSocket().WriteBufferSizeBytes,
@@ -71,7 +72,7 @@ func NewSocketWsAcceptor(logger *zap.Logger, config Config, sessionRegistry Sess
 			http.Error(w, "Missing or invalid token", http.StatusUnauthorized)
 			return
 		}
-		userID, username, vars, expiry, tokenId, issuedAt, ok := parseToken([]byte(config.GetSession().EncryptionKey), token)
+		userID, username, vars, expiry, tokenId, issuedAt, tenantID, ok := parseToken([]byte(config.GetSession().EncryptionKey), token)
 		if !ok || !sessionCache.IsValidSession(userID, expiry, token) {
 			http.Error(w, "Missing or invalid token", http.StatusUnauthorized)
 			return
@@ -99,7 +100,7 @@ func NewSocketWsAcceptor(logger *zap.Logger, config Config, sessionRegistry Sess
 		metrics.CountWebsocketOpened(1)
 
 		// Wrap the connection for application handling.
-		session := NewSessionWS(logger, config, format, sessionID, userID, username, tokenId, vars, expiry, issuedAt, clientIP, clientPort, lang, protojsonMarshaler, protojsonUnmarshaler, conn, sessionRegistry, statusRegistry, tracker, metrics, pipeline)
+		session := NewSessionWS(logger, config, format, sessionID, userID, username, tokenId, vars, expiry, tenantID, issuedAt, clientIP, clientPort, lang, protojsonMarshaler, protojsonUnmarshaler, conn, sessionRegistry, statusRegistry, tracker, metrics, pipeline)
 
 		// Add to the session registry.
 		sessionRegistry.Add(session)

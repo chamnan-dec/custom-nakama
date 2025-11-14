@@ -26,6 +26,7 @@ import (
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/rtapi"
 	"github.com/heroiclabs/nakama-common/runtime"
+	"github.com/thaibev/nakama/v3/internal/auth"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -46,7 +47,8 @@ const (
 var controlCharsRegex = regexp.MustCompilePOSIX("[[:cntrl:]]+")
 
 func (p *Pipeline) channelJoin(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(session.TenantID())
 	if err != nil {
 		return false, nil
 	}
@@ -191,7 +193,8 @@ func (p *Pipeline) channelLeave(logger *zap.Logger, session Session, envelope *r
 }
 
 func (p *Pipeline) channelMessageSend(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(session.TenantID())
 	if err != nil {
 		return false, nil
 	}
@@ -240,7 +243,8 @@ func (p *Pipeline) channelMessageSend(logger *zap.Logger, session Session, envel
 }
 
 func (p *Pipeline) channelMessageUpdate(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(session.TenantID())
 	if err != nil {
 		return false, nil
 	}
@@ -302,7 +306,8 @@ func (p *Pipeline) channelMessageUpdate(logger *zap.Logger, session Session, env
 }
 
 func (p *Pipeline) channelMessageRemove(logger *zap.Logger, session Session, envelope *rtapi.Envelope) (bool, *rtapi.Envelope) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(session.TenantID())
 	if err != nil {
 		return false, nil
 	}

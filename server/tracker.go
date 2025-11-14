@@ -24,6 +24,7 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/rtapi"
 	"github.com/heroiclabs/nakama-common/runtime"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -189,7 +190,7 @@ type LocalTracker struct {
 	ctxCancelFn context.CancelFunc
 }
 
-func StartLocalTracker(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions) Tracker {
+func StartLocalTracker(logger *zap.Logger, config config.Config, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, metrics Metrics, protojsonMarshaler *protojson.MarshalOptions) Tracker {
 	ctx, ctxCancelFn := context.WithCancel(context.Background())
 
 	t := &LocalTracker{

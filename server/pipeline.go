@@ -18,13 +18,14 @@ import (
 	"fmt"
 
 	"github.com/heroiclabs/nakama-common/rtapi"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type Pipeline struct {
 	logger               *zap.Logger
-	config               Config
+	config               config.Config
 	protojsonMarshaler   *protojson.MarshalOptions
 	protojsonUnmarshaler *protojson.UnmarshalOptions
 	sessionRegistry      SessionRegistry
@@ -34,7 +35,7 @@ type Pipeline struct {
 	node                 string
 }
 
-func NewPipeline(logger *zap.Logger, config Config, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, tracker Tracker, router MessageRouter) *Pipeline {
+func NewPipeline(logger *zap.Logger, config config.Config, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, tracker Tracker, router MessageRouter) *Pipeline {
 	return &Pipeline{
 		logger:               logger,
 		config:               config,

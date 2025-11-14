@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/gorilla/handlers"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/prometheus"
 	"go.uber.org/atomic"
@@ -72,8 +73,7 @@ var _ Metrics = &LocalMetrics{}
 
 type LocalMetrics struct {
 	logger *zap.Logger
-	config Config
-	// db     *sql.DB
+	config config.Config
 
 	cancelFn context.CancelFunc
 
@@ -93,7 +93,7 @@ type LocalMetrics struct {
 	prometheusHTTPServer  *http.Server
 }
 
-func NewLocalMetrics(logger, startupLogger *zap.Logger, config Config) *LocalMetrics {
+func NewLocalMetrics(logger, startupLogger *zap.Logger, config config.Config) *LocalMetrics {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	m := &LocalMetrics{

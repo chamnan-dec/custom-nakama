@@ -21,6 +21,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,8 +32,8 @@ var (
 	ErrRefreshTokenInvalid = errors.New("refresh token invalid")
 )
 
-func SessionRefresh(ctx context.Context, logger *zap.Logger, db *sql.DB, config Config, sessionCache SessionCache, token string) (uuid.UUID, string, map[string]string, string, int64, error) {
-	userID, _, vars, exp, tokenId, tokenIssuedAt, ok := parseToken([]byte(config.GetSession().RefreshEncryptionKey), token)
+func SessionRefresh(ctx context.Context, logger *zap.Logger, db *sql.DB, config config.Config, sessionCache SessionCache, token string) (uuid.UUID, string, map[string]string, string, int64, error) {
+	userID, _, vars, exp, tokenId, tokenIssuedAt, _, ok := parseToken([]byte(config.GetSession().RefreshEncryptionKey), token)
 	if !ok {
 		return uuid.Nil, "", nil, "", 0, status.Error(codes.Unauthenticated, "Refresh token invalid or expired.")
 	}
@@ -63,13 +64,13 @@ func SessionRefresh(ctx context.Context, logger *zap.Logger, db *sql.DB, config 
 	return userID, dbUsername, vars, tokenId, tokenIssuedAt, nil
 }
 
-func SessionLogout(config Config, sessionCache SessionCache, userID uuid.UUID, token, refreshToken string) error {
+func SessionLogout(config config.Config, sessionCache SessionCache, userID uuid.UUID, token, refreshToken string) error {
 	var maybeSessionExp int64
 	var maybeSessionTokenId string
 	if token != "" {
 		var sessionUserID uuid.UUID
 		var ok bool
-		sessionUserID, _, _, maybeSessionExp, maybeSessionTokenId, _, ok = parseToken([]byte(config.GetSession().EncryptionKey), token)
+		sessionUserID, _, _, maybeSessionExp, maybeSessionTokenId, _, _, ok = parseToken([]byte(config.GetSession().EncryptionKey), token)
 		if !ok || sessionUserID != userID {
 			return ErrSessionTokenInvalid
 		}
@@ -80,7 +81,7 @@ func SessionLogout(config Config, sessionCache SessionCache, userID uuid.UUID, t
 	if refreshToken != "" {
 		var refreshUserID uuid.UUID
 		var ok bool
-		refreshUserID, _, _, maybeRefreshExp, maybeRefreshTokenId, _, ok = parseToken([]byte(config.GetSession().RefreshEncryptionKey), refreshToken)
+		refreshUserID, _, _, maybeRefreshExp, maybeRefreshTokenId, _, _, ok = parseToken([]byte(config.GetSession().RefreshEncryptionKey), refreshToken)
 		if !ok || refreshUserID != userID {
 			return ErrRefreshTokenInvalid
 		}

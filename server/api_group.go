@@ -21,17 +21,23 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/runtime"
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (s *ApiServer) CreateGroup(ctx context.Context, in *api.CreateGroupRequest) (*api.Group, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group name must be set.")
@@ -57,11 +63,15 @@ func (s *ApiServer) CreateGroup(ctx context.Context, in *api.CreateGroupRequest)
 }
 
 func (s *ApiServer) UpdateGroup(ctx context.Context, in *api.UpdateGroupRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -103,11 +113,15 @@ func (s *ApiServer) UpdateGroup(ctx context.Context, in *api.UpdateGroupRequest)
 }
 
 func (s *ApiServer) DeleteGroup(ctx context.Context, in *api.DeleteGroupRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -130,12 +144,16 @@ func (s *ApiServer) DeleteGroup(ctx context.Context, in *api.DeleteGroupRequest)
 }
 
 func (s *ApiServer) JoinGroup(ctx context.Context, in *api.JoinGroupRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
+	username := ctx.Value(contextx.UsernameKey{}).(string)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
-	username := ctx.Value(ctxUsernameKey{}).(string)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -162,12 +180,16 @@ func (s *ApiServer) JoinGroup(ctx context.Context, in *api.JoinGroupRequest) (*e
 }
 
 func (s *ApiServer) LeaveGroup(ctx context.Context, in *api.LeaveGroupRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
-	username := ctx.Value(ctxUsernameKey{}).(string)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	username := ctx.Value(contextx.UsernameKey{}).(string)
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -190,11 +212,15 @@ func (s *ApiServer) LeaveGroup(ctx context.Context, in *api.LeaveGroupRequest) (
 }
 
 func (s *ApiServer) AddGroupUsers(ctx context.Context, in *api.AddGroupUsersRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -236,11 +262,15 @@ func (s *ApiServer) AddGroupUsers(ctx context.Context, in *api.AddGroupUsersRequ
 }
 
 func (s *ApiServer) BanGroupUsers(ctx context.Context, in *api.BanGroupUsersRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -275,11 +305,15 @@ func (s *ApiServer) BanGroupUsers(ctx context.Context, in *api.BanGroupUsersRequ
 }
 
 func (s *ApiServer) KickGroupUsers(ctx context.Context, in *api.KickGroupUsersRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -314,11 +348,15 @@ func (s *ApiServer) KickGroupUsers(ctx context.Context, in *api.KickGroupUsersRe
 }
 
 func (s *ApiServer) PromoteGroupUsers(ctx context.Context, in *api.PromoteGroupUsersRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -358,7 +396,12 @@ func (s *ApiServer) PromoteGroupUsers(ctx context.Context, in *api.PromoteGroupU
 }
 
 func (s *ApiServer) ListGroupUsers(ctx context.Context, in *api.ListGroupUsersRequest) (*api.GroupUserList, error) {
-	db, err := GetDB("region_a")
+	_, tenantID, err := contextx.ExtractUserAndTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,11 +441,15 @@ func (s *ApiServer) ListGroupUsers(ctx context.Context, in *api.ListGroupUsersRe
 }
 
 func (s *ApiServer) DemoteGroupUsers(ctx context.Context, in *api.DemoteGroupUsersRequest) (*emptypb.Empty, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetGroupId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Group ID must be set.")
@@ -442,7 +489,12 @@ func (s *ApiServer) DemoteGroupUsers(ctx context.Context, in *api.DemoteGroupUse
 }
 
 func (s *ApiServer) ListUserGroups(ctx context.Context, in *api.ListUserGroupsRequest) (*api.UserGroupList, error) {
-	db, err := GetDB("region_a")
+	_, tenantID, err := contextx.ExtractUserAndTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +534,12 @@ func (s *ApiServer) ListUserGroups(ctx context.Context, in *api.ListUserGroupsRe
 }
 
 func (s *ApiServer) ListGroups(ctx context.Context, in *api.ListGroupsRequest) (*api.GroupList, error) {
-	db, err := GetDB("region_a")
+	_, tenantID, err := contextx.ExtractUserAndTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
 	if err != nil {
 		return nil, err
 	}

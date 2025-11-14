@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package server
+package config
 
 import (
 	"crypto/tls"
@@ -37,6 +37,7 @@ type Config interface {
 	GetMetrics() *MetricsConfig
 	GetSession() *SessionConfig
 	GetSocket() *SocketConfig
+	GetAuth() *AuthConfig
 	GetTracker() *TrackerConfig
 	GetLimit() int
 
@@ -89,6 +90,7 @@ type config struct {
 	Session          *SessionConfig `yaml:"session" json:"session" usage:"Session authentication settings."`
 	Socket           *SocketConfig  `yaml:"socket" json:"socket" usage:"Socket configuration."`
 	Tracker          *TrackerConfig `yaml:"tracker" json:"tracker" usage:"Presence tracker properties."`
+	Auth             *AuthConfig    `yaml:"auth" json:"auth" usage:"Holds configuration settings related to authentication and token management."`
 	Limit            int            `json:"-"` // Only used for migrate command.
 }
 
@@ -105,6 +107,8 @@ func NewConfig(logger *zap.Logger) *config {
 		Logger:           NewLoggerConfig(),
 		Session:          NewSessionConfig(),
 		Socket:           NewSocketConfig(),
+		Tracker:          NewTrackerConfig(),
+		Auth:             NewAuthConfig(),
 
 		Limit: -1,
 	}
@@ -125,6 +129,7 @@ func (c *config) Clone() (Config, error) {
 		Session:          c.Session.Clone(),
 		Socket:           configSocket,
 		Tracker:          c.Tracker.Clone(),
+		Auth:             c.Auth.Clone(),
 		Limit:            c.Limit,
 	}
 
@@ -161,6 +166,10 @@ func (c *config) GetSocket() *SocketConfig {
 
 func (c *config) GetTracker() *TrackerConfig {
 	return c.Tracker
+}
+
+func (c *config) GetAuth() *AuthConfig {
+	return c.Auth
 }
 
 func (c *config) GetLimit() int {
@@ -425,5 +434,25 @@ func (cfg *TrackerConfig) Clone() *TrackerConfig {
 func NewTrackerConfig() *TrackerConfig {
 	return &TrackerConfig{
 		EventQueueSize: 1024,
+	}
+}
+
+// AuthConfig holds configuration settings related to authentication and token management.
+type AuthConfig struct {
+	SecretKey string `yaml:"secret_key" json:"secret_key" usage:"Secret key used to sign and verify authentication tokens. Must be kept private and consistent across server restarts."`
+}
+
+func (cfg *AuthConfig) Clone() *AuthConfig {
+	if cfg == nil {
+		return nil
+	}
+
+	cfgCopy := *cfg
+	return &cfgCopy
+}
+
+func NewAuthConfig() *AuthConfig {
+	return &AuthConfig{
+		SecretKey: "DEFAULT_SECRET_KEY",
 	}
 }

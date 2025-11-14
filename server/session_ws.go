@@ -26,6 +26,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/heroiclabs/nakama-common/rtapi"
 	"github.com/heroiclabs/nakama-common/runtime"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -37,10 +38,11 @@ var ErrSessionQueueFull = errors.New("session outgoing queue full")
 type sessionWS struct {
 	sync.Mutex
 	logger     *zap.Logger
-	config     Config
+	config     config.Config
 	id         uuid.UUID
 	format     SessionFormat
 	userID     uuid.UUID
+	tenantID   string
 	username   *atomic.String
 	vars       map[string]string
 	expiry     int64
@@ -75,14 +77,13 @@ type sessionWS struct {
 	closeMu                sync.Mutex
 }
 
-func NewSessionWS(logger *zap.Logger, config Config, format SessionFormat, sessionID, userID uuid.UUID, username, tokenId string, vars map[string]string, tokenExpiry, tokenIssuedAt int64, clientIP, clientPort, lang string, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, conn *websocket.Conn, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, tracker Tracker, metrics Metrics, pipeline *Pipeline) Session {
+func NewSessionWS(logger *zap.Logger, config config.Config, format SessionFormat, sessionID, userID uuid.UUID, username, tokenId string, vars map[string]string, tokenExpiry int64, tenantID string, tokenIssuedAt int64, clientIP, clientPort, lang string, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, conn *websocket.Conn, sessionRegistry SessionRegistry, statusRegistry StatusRegistry, tracker Tracker, metrics Metrics, pipeline *Pipeline) Session {
 	sessionLogger := logger.With(zap.String("uid", userID.String()), zap.String("sid", sessionID.String()))
 
 	sessionLogger.Info("New WebSocket session connected", zap.Uint8("format", uint8(format)))
 
 	ctx, ctxCancelFn := context.WithCancel(context.Background())
-	ctx = populateCtx(ctx, userID, username, tokenId, vars, tokenExpiry, tokenIssuedAt)
-
+	ctx = populateCtx(ctx, userID, username, tokenId, vars, tokenExpiry, tokenIssuedAt, tenantID)
 	wsMessageType := websocket.TextMessage
 	if format == SessionFormatProtobuf {
 		wsMessageType = websocket.BinaryMessage
@@ -94,6 +95,7 @@ func NewSessionWS(logger *zap.Logger, config Config, format SessionFormat, sessi
 		id:         sessionID,
 		format:     format,
 		userID:     userID,
+		tenantID:   tenantID,
 		username:   atomic.NewString(username),
 		vars:       vars,
 		expiry:     tokenExpiry,
@@ -138,6 +140,10 @@ func (s *sessionWS) ID() uuid.UUID {
 
 func (s *sessionWS) UserID() uuid.UUID {
 	return s.userID
+}
+
+func (s *sessionWS) TenantID() string {
+	return s.tenantID
 }
 
 func (s *sessionWS) ClientIP() string {

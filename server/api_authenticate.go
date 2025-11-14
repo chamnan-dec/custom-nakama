@@ -23,6 +23,9 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/heroiclabs/nakama-common/api"
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/config"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -40,6 +43,7 @@ type SessionTokenClaims struct {
 	Vars      map[string]string `json:"vrs,omitempty"`
 	ExpiresAt int64             `json:"exp,omitempty"`
 	IssuedAt  int64             `json:"iat,omitempty"`
+	TenantID  string            `json:"ttn,omitempty"`
 }
 
 func (s *SessionTokenClaims) GetExpirationTime() (*jwt.NumericDate, error) {
@@ -136,9 +140,11 @@ func (s *SessionTokenClaims) GetSubject() (string, error) {
 // }
 
 func (s *ApiServer) AuthenticateDevice(ctx context.Context, in *api.AuthenticateDeviceRequest) (*api.Session, error) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	apiKey := ctx.Value(contextx.NakamaApiKey{}).(string)
+	db, err := authManager.GetDBFromAPIKey(apiKey)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, "DB not available")
 	}
 	if in.Account == nil || in.Account.Id == "" {
 		return nil, status.Error(codes.InvalidArgument, "Device ID is required.")
@@ -171,8 +177,9 @@ func (s *ApiServer) AuthenticateDevice(ctx context.Context, in *api.Authenticate
 
 	tokenID := uuid.Must(uuid.NewV4()).String()
 	tokenIssuedAt := time.Now().Unix()
-	token, exp := generateToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
-	refreshToken, refreshExp := generateRefreshToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars)
+	tenantID, _ := authManager.GetTenantID(dbUserID, apiKey) //@TODO handle Error
+	token, exp := generateToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars, tenantID)
+	refreshToken, refreshExp := generateRefreshToken(s.config, tokenID, tokenIssuedAt, dbUserID, dbUsername, in.Account.Vars, tenantID)
 	s.sessionCache.Add(uuid.FromStringOrNil(dbUserID), exp, tokenID, refreshExp, tokenID)
 	session := &api.Session{Created: created, Token: token, RefreshToken: refreshToken}
 
@@ -283,17 +290,17 @@ func (s *ApiServer) AuthenticateDevice(ctx context.Context, in *api.Authenticate
 // 	return session, nil
 // }
 
-func generateToken(config Config, tokenID string, tokenIssuedAt int64, userID, username string, vars map[string]string) (string, int64) {
+func generateToken(config config.Config, tokenID string, tokenIssuedAt int64, userID, username string, vars map[string]string, tenantID string) (string, int64) {
 	exp := time.Now().UTC().Add(time.Duration(config.GetSession().TokenExpirySec) * time.Second).Unix()
-	return generateTokenWithExpiry(config.GetSession().EncryptionKey, tokenID, tokenIssuedAt, userID, username, vars, exp)
+	return generateTokenWithExpiry(config.GetSession().EncryptionKey, tokenID, tokenIssuedAt, userID, username, vars, exp, tenantID)
 }
 
-func generateRefreshToken(config Config, tokenID string, tokenIssuedAt int64, userID string, username string, vars map[string]string) (string, int64) {
+func generateRefreshToken(config config.Config, tokenID string, tokenIssuedAt int64, userID string, username string, vars map[string]string, tenantID string) (string, int64) {
 	exp := time.Now().UTC().Add(time.Duration(config.GetSession().RefreshTokenExpirySec) * time.Second).Unix()
-	return generateTokenWithExpiry(config.GetSession().RefreshEncryptionKey, tokenID, tokenIssuedAt, userID, username, vars, exp)
+	return generateTokenWithExpiry(config.GetSession().RefreshEncryptionKey, tokenID, tokenIssuedAt, userID, username, vars, exp, tenantID)
 }
 
-func generateTokenWithExpiry(signingKey, tokenID string, tokenIssuedAt int64, userID, username string, vars map[string]string, exp int64) (string, int64) {
+func generateTokenWithExpiry(signingKey, tokenID string, tokenIssuedAt int64, userID, username string, vars map[string]string, exp int64, tenantID string) (string, int64) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &SessionTokenClaims{
 		TokenId:   tokenID,
 		UserId:    userID,
@@ -301,6 +308,7 @@ func generateTokenWithExpiry(signingKey, tokenID string, tokenIssuedAt int64, us
 		Vars:      vars,
 		ExpiresAt: exp,
 		IssuedAt:  tokenIssuedAt,
+		TenantID:  tenantID,
 	})
 	signedToken, _ := token.SignedString([]byte(signingKey))
 	return signedToken, exp

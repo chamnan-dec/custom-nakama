@@ -24,6 +24,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"go.uber.org/zap"
 )
 
@@ -46,6 +47,7 @@ func (s *ApiServer) RpcFuncHttp(w http.ResponseWriter, r *http.Request) {
 	// var username string
 	var vars map[string]string
 	var expiry int64
+	var tenantID string
 	requestCtx := r.Context()
 	if httpKey := queryParams.Get("http_key"); httpKey != "" {
 		// if httpKey != s.config.GetRuntime().HTTPKey {
@@ -73,11 +75,12 @@ func (s *ApiServer) RpcFuncHttp(w http.ResponseWriter, r *http.Request) {
 		} else {
 			var tokenId string
 			var tokenIssuedAt int64
-			userID, _, vars, expiry, tokenId, tokenIssuedAt, isTokenAuth = parseBearerAuth([]byte(s.config.GetSession().EncryptionKey), auth[0])
-			requestCtx = context.WithValue(requestCtx, ctxTokenIDKey{}, tokenId)
-			requestCtx = context.WithValue(requestCtx, ctxExpiryKey{}, expiry)
-			requestCtx = context.WithValue(requestCtx, ctxTokenIssuedAtKey{}, tokenIssuedAt)
-			requestCtx = context.WithValue(requestCtx, ctxVarsKey{}, vars)
+			userID, _, vars, expiry, tokenId, tokenIssuedAt, tenantID, isTokenAuth = parseBearerAuth([]byte(s.config.GetSession().EncryptionKey), auth[0])
+			requestCtx = context.WithValue(requestCtx, contextx.TokenIDKey{}, tokenId)
+			requestCtx = context.WithValue(requestCtx, contextx.ExpiryKey{}, expiry)
+			requestCtx = context.WithValue(requestCtx, contextx.TokenIssuedAtKey{}, tokenIssuedAt)
+			requestCtx = context.WithValue(requestCtx, contextx.VarsKey{}, vars)
+			requestCtx = context.WithValue(requestCtx, contextx.TenantIDKey{}, tenantID)
 
 			if !isTokenAuth || !s.sessionCache.IsValidSession(userID, expiry, tokenId) {
 				// Auth token not valid or expired.

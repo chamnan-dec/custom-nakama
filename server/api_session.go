@@ -19,6 +19,8 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,9 +28,11 @@ import (
 )
 
 func (s *ApiServer) SessionRefresh(ctx context.Context, in *api.SessionRefreshRequest) (*api.Session, error) {
-	db, err := GetDB("region_a")
+	authManager := auth.GetManager()
+	apiKey := ctx.Value(contextx.NakamaApiKey{}).(string)
+	db, err := authManager.GetDBFromAPIKey(apiKey)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.Internal, "DB not available")
 	}
 	// Before hook.
 	if in.Token == "" {
@@ -54,8 +58,9 @@ func (s *ApiServer) SessionRefresh(ctx context.Context, in *api.SessionRefreshRe
 	//s.sessionCache.Add(userID, tokenExp, newTokenId, refreshTokenExp, newTokenId)
 	//session := &api.Session{Created: false, Token: token, RefreshToken: refreshToken}
 
-	token, tokenExp := generateToken(s.config, tokenId, tokenIssuedAt, userIDStr, username, useVars)
-	refreshToken, refreshTokenExp := generateRefreshToken(s.config, tokenId, tokenIssuedAt, userIDStr, username, useVars)
+	tenantID, err := authManager.GetTenantID(userIDStr, apiKey) //@TODO Handle Error
+	token, tokenExp := generateToken(s.config, tokenId, tokenIssuedAt, userIDStr, username, useVars, tenantID)
+	refreshToken, refreshTokenExp := generateRefreshToken(s.config, tokenId, tokenIssuedAt, userIDStr, username, useVars, tenantID)
 	s.sessionCache.Add(userID, tokenExp, tokenId, refreshTokenExp, tokenId)
 	session := &api.Session{Created: false, Token: token, RefreshToken: refreshToken}
 
@@ -63,7 +68,7 @@ func (s *ApiServer) SessionRefresh(ctx context.Context, in *api.SessionRefreshRe
 }
 
 func (s *ApiServer) SessionLogout(ctx context.Context, in *api.SessionLogoutRequest) (*emptypb.Empty, error) {
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	userID := ctx.Value(contextx.UserIDKey{}).(uuid.UUID)
 
 	if err := SessionLogout(s.config, s.sessionCache, userID, in.Token, in.RefreshToken); err != nil {
 		if err == ErrSessionTokenInvalid {

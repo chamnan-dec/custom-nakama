@@ -21,6 +21,7 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/rtapi"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -64,7 +65,7 @@ type LocalStatusRegistry struct {
 	onlineCache map[uuid.UUID]map[string]struct{}
 }
 
-func NewLocalStatusRegistry(logger *zap.Logger, config Config, sessionRegistry SessionRegistry, protojsonMarshaler *protojson.MarshalOptions) StatusRegistry {
+func NewLocalStatusRegistry(logger *zap.Logger, config config.Config, sessionRegistry SessionRegistry, protojsonMarshaler *protojson.MarshalOptions) StatusRegistry {
 	ctx, ctxCancelFn := context.WithCancel(context.Background())
 
 	s := &LocalStatusRegistry{

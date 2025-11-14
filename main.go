@@ -26,6 +26,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Blank import to register SQL driver
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/config"
 	"github.com/thaibev/nakama/v3/server"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -50,19 +52,25 @@ var (
 	}
 )
 
-var dbConfigs = map[string]string{
-	"region_a": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
-	"region_b": "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
+type DBConfig struct {
+	DBURL  string
+	APIKey string
+}
+
+// Map ใช้ TenantID เป็น key
+var dbConfigs = map[string]DBConfig{
+	"tenant_id_for_one_bangkok_aAdweds2341SFvwe222": {
+		DBURL:  "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
+		APIKey: "api_key_for_tenant_one_bangkok_eASmCjXhaakpSlpH0JQlaOaLTcuJJRd8",
+	},
+	"tenant_id_for_gateway_bangsue_aAdweds2341SFvwe333": {
+		DBURL:  "postgresql://postgres:aaRGhDJRtiHyJhcXntEnyWvyQRenkGXQ@mainline.proxy.rlwy.net:16983/sook?sslmode=require&options=-c%20search_path=public",
+		APIKey: "api_key_for_tenant_gateway_bangsue_hO9uMZT2W0CIVdHNuhvtnmRc4G62Giw9",
+	},
 }
 
 func main() {
 	defer os.Exit(0)
-
-	for key, url := range dbConfigs {
-		if err := server.SetupPool(key, url); err != nil {
-			log.Fatalf("setup pool for %s failed: %v", key, err)
-		}
-	}
 
 	semver := fmt.Sprintf("%s+%s", version, commitID)
 	// Always set default timeout on HTTP client.
@@ -72,8 +80,17 @@ func main() {
 
 	_, ctxCancelFn := context.WithCancel(context.Background())
 
-	config := server.ParseArgs(tmpLogger, os.Args)
+	config := config.ParseArgs(tmpLogger, os.Args)
 	logger, startupLogger := server.SetupLogging(tmpLogger, config)
+
+	auth.InitTokenManager(config.GetAuth())
+	tokenManager := auth.GetManager()
+
+	for tenantID, cfg := range dbConfigs {
+		if err := tokenManager.SetupDBPool(tenantID, cfg.DBURL, cfg.APIKey); err != nil {
+			log.Fatalf("failed to setup DB pool for tenant %s: %v", tenantID, err)
+		}
+	}
 
 	startupLogger.Info("Nakama starting")
 	startupLogger.Info("Node", zap.String("name", config.GetName()), zap.String("version", semver), zap.String("runtime", runtime.Version()), zap.Int("cpu", runtime.NumCPU()), zap.Int("proc", runtime.GOMAXPROCS(0)))

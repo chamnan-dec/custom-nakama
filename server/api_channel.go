@@ -17,19 +17,24 @@ package server
 import (
 	"context"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/runtime"
+	"github.com/thaibev/nakama/v3/internal/auth"
+	"github.com/thaibev/nakama/v3/internal/contextx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func (s *ApiServer) ListChannelMessages(ctx context.Context, in *api.ListChannelMessagesRequest) (*api.ChannelMessageList, error) {
-	db, err := GetDB("region_a")
+	userID, tenantID, err := contextx.ExtractUserAndTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	userID := ctx.Value(ctxUserIDKey{}).(uuid.UUID)
+	authManager := auth.GetManager()
+	db, err := authManager.GetDB(tenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	if in.ChannelId == "" {
 		return nil, status.Error(codes.InvalidArgument, "Invalid channel ID.")

@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/gofrs/uuid/v5"
+	"github.com/thaibev/nakama/v3/internal/config"
 )
 
 var (
@@ -39,7 +40,7 @@ type LocalStreamManager struct {
 	nodeHash [6]byte
 }
 
-func NewLocalStreamManager(config Config, sessionRegistry SessionRegistry, tracker Tracker) StreamManager {
+func NewLocalStreamManager(config config.Config, sessionRegistry SessionRegistry, tracker Tracker) StreamManager {
 	return &LocalStreamManager{
 		sessionRegistry: sessionRegistry,
 		tracker:         tracker,
