@@ -27,6 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/jackc/pgx/v5/stdlib" // Blank import to register SQL driver
+	"github.com/joho/godotenv"
 	"github.com/thaibev/nakama/v3/internal/auth"
 	"github.com/thaibev/nakama/v3/internal/config"
 	"github.com/thaibev/nakama/v3/migrate"
@@ -126,15 +127,32 @@ func getDbConfigs() map[string]DBConfig {
 		dbSSLMode = "disable" // Default for local development
 	}
 
+	// return map[string]DBConfig{
+	// 	tenantID1: {
+	// 		DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName1, dbSSLMode, dbSchema1),
+	// 		APIKey: tenantAPIKey1,
+	// 	},
+	// 	tenantID2: {
+	// 		DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName2, dbSSLMode, dbSchema2),
+	// 		APIKey: tenantAPIKey2,
+	// 	},
+	// }
 	return map[string]DBConfig{
 		tenantID1: {
-			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName1, dbSSLMode, dbSchema1),
+			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s", dbUsername, dbPassword, dbHost, dbPort, dbName1, dbSSLMode),
 			APIKey: tenantAPIKey1,
 		},
 		tenantID2: {
-			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName2, dbSSLMode, dbSchema2),
+			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s", dbUsername, dbPassword, dbHost, dbPort, dbName2, dbSSLMode),
 			APIKey: tenantAPIKey2,
 		},
+	}
+}
+
+func init() {
+	// Load .env file (ignore error if file doesn't exist in production)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
 	}
 }
 
@@ -227,9 +245,15 @@ func main() {
 	router := server.NewLocalMessageRouter(sessionRegistry, tracker, jsonpbMarshaler)
 	streamManager := server.NewLocalStreamManager(config, sessionRegistry, tracker)
 
+	// Initialize presign service
+	presignService, _ := server.NewPresignServiceFromEnv()
+	// if err != nil {
+	// 	logger.Fatal("Failed to initialize presign service", zap.Error(err))
+	// }
+
 	pipeline := server.NewPipeline(logger, config, jsonpbMarshaler, jsonpbUnmarshaler, sessionRegistry, statusRegistry, tracker, router)
 
-	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline)
+	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline, presignService)
 
 	// Respect OS stop signals.
 	c := make(chan os.Signal, 2)

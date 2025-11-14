@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +29,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/thaibev/nakama/v3/internal/config"
 	"go.uber.org/zap"
 )
 
@@ -44,209 +42,209 @@ const connMaxLifetime = 3600000
 const maxOpenConns = 100
 const maxIdleConns = 100
 
-var dbUrls = [...]string{"postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app", "12321"}
+// var dbUrls = [...]string{"postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app", "12321"}
 
-func DbConnect(ctx context.Context, logger *zap.Logger, config config.Config, create bool) *sql.DB {
-	rawURL := dbUrls[0]
-	if !(strings.HasPrefix(rawURL, "postgresql://") || strings.HasPrefix(rawURL, "postgres://")) {
-		rawURL = fmt.Sprintf("postgres://%s", rawURL)
-	}
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		logger.Fatal("Bad database connection URL", zap.Error(err))
-	}
-	query := parsedURL.Query()
-	var queryUpdated bool
-	if len(query.Get("sslmode")) == 0 {
-		query.Set("sslmode", "prefer")
-		queryUpdated = true
-	}
-	if queryUpdated {
-		parsedURL.RawQuery = query.Encode()
-	}
+// func DbConnect(ctx context.Context, logger *zap.Logger, config config.Config, create bool) *sql.DB {
+// 	rawURL := dbUrls[0]
+// 	if !(strings.HasPrefix(rawURL, "postgresql://") || strings.HasPrefix(rawURL, "postgres://")) {
+// 		rawURL = fmt.Sprintf("postgres://%s", rawURL)
+// 	}
+// 	parsedURL, err := url.Parse(rawURL)
+// 	if err != nil {
+// 		logger.Fatal("Bad database connection URL", zap.Error(err))
+// 	}
+// 	query := parsedURL.Query()
+// 	var queryUpdated bool
+// 	if len(query.Get("sslmode")) == 0 {
+// 		query.Set("sslmode", "prefer")
+// 		queryUpdated = true
+// 	}
+// 	if queryUpdated {
+// 		parsedURL.RawQuery = query.Encode()
+// 	}
 
-	if len(parsedURL.User.Username()) < 1 {
-		parsedURL.User = url.User("root")
-	}
-	dbName := "nakama"
-	if len(parsedURL.Path) > 0 {
-		dbName = parsedURL.Path[1:]
-	} else {
-		parsedURL.Path = "/" + dbName
-	}
+// 	if len(parsedURL.User.Username()) < 1 {
+// 		parsedURL.User = url.User("root")
+// 	}
+// 	dbName := "nakama"
+// 	if len(parsedURL.Path) > 0 {
+// 		dbName = parsedURL.Path[1:]
+// 	} else {
+// 		parsedURL.Path = "/" + dbName
+// 	}
 
-	// Resolve initial database address based on host before connecting.
-	dbHostname := parsedURL.Hostname()
-	resolvedAddr, resolvedAddrMap := dbResolveAddress(ctx, logger, dbHostname)
+// 	// Resolve initial database address based on host before connecting.
+// 	dbHostname := parsedURL.Hostname()
+// 	resolvedAddr, resolvedAddrMap := dbResolveAddress(ctx, logger, dbHostname)
 
-	db, err := sql.Open("pgx", parsedURL.String())
-	if err != nil {
-		logger.Fatal("Failed to open database", zap.Error(err))
-	}
+// 	db, err := sql.Open("pgx", parsedURL.String())
+// 	if err != nil {
+// 		logger.Fatal("Failed to open database", zap.Error(err))
+// 	}
 
-	if create {
-		var nakamaDBExists bool
-		if err = db.QueryRow("SELECT EXISTS (SELECT 1 from pg_database WHERE datname = $1)", dbName).Scan(&nakamaDBExists); err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == dbErrorDatabaseDoesNotExist {
-				nakamaDBExists = false
-			} else {
-				db.Close()
-				logger.Fatal("Failed to check if db exists", zap.String("db", dbName), zap.Error(err))
-			}
-		}
+// 	if create {
+// 		var nakamaDBExists bool
+// 		if err = db.QueryRow("SELECT EXISTS (SELECT 1 from pg_database WHERE datname = $1)", dbName).Scan(&nakamaDBExists); err != nil {
+// 			var pgErr *pgconn.PgError
+// 			if errors.As(err, &pgErr) && pgErr.Code == dbErrorDatabaseDoesNotExist {
+// 				nakamaDBExists = false
+// 			} else {
+// 				db.Close()
+// 				logger.Fatal("Failed to check if db exists", zap.String("db", dbName), zap.Error(err))
+// 			}
+// 		}
 
-		if !nakamaDBExists {
-			// Database does not exist, create it
-			logger.Info("Creating new database", zap.String("name", dbName))
-			db.Close()
-			// Connect to anonymous db
-			parsedURL.Path = ""
-			db, err = sql.Open("pgx", parsedURL.String())
-			if err != nil {
-				logger.Fatal("Failed to open database", zap.Error(err))
-			}
-			if _, err = db.Exec(fmt.Sprintf("CREATE DATABASE %q", dbName)); err != nil {
-				db.Close()
-				logger.Fatal("Failed to create database", zap.Error(err))
-			}
-			db.Close()
-			parsedURL.Path = fmt.Sprintf("/%s", dbName)
-			db, err = sql.Open("pgx", parsedURL.String())
-			if err != nil {
-				db.Close()
-				logger.Fatal("Failed to open database", zap.Error(err))
-			}
-		}
-	}
+// 		if !nakamaDBExists {
+// 			// Database does not exist, create it
+// 			logger.Info("Creating new database", zap.String("name", dbName))
+// 			db.Close()
+// 			// Connect to anonymous db
+// 			parsedURL.Path = ""
+// 			db, err = sql.Open("pgx", parsedURL.String())
+// 			if err != nil {
+// 				logger.Fatal("Failed to open database", zap.Error(err))
+// 			}
+// 			if _, err = db.Exec(fmt.Sprintf("CREATE DATABASE %q", dbName)); err != nil {
+// 				db.Close()
+// 				logger.Fatal("Failed to create database", zap.Error(err))
+// 			}
+// 			db.Close()
+// 			parsedURL.Path = fmt.Sprintf("/%s", dbName)
+// 			db, err = sql.Open("pgx", parsedURL.String())
+// 			if err != nil {
+// 				db.Close()
+// 				logger.Fatal("Failed to open database", zap.Error(err))
+// 			}
+// 		}
+// 	}
 
-	logger.Debug("Complete database connection URL", zap.String("raw_url", parsedURL.String()))
-	db, err = sql.Open("pgx", parsedURL.String())
-	if err != nil {
-		logger.Fatal("Error connecting to database", zap.Error(err))
-	}
-	// Limit max time allowed across database ping and version fetch to 15 seconds total.
-	pingCtx, pingCtxCancelFn := context.WithTimeout(ctx, 15*time.Second)
-	defer pingCtxCancelFn()
-	if err = db.PingContext(pingCtx); err != nil {
-		if strings.HasSuffix(err.Error(), "does not exist (SQLSTATE 3D000)") {
-			logger.Fatal("Database schema not found, run `nakama migrate up`", zap.Error(err))
-		}
-		logger.Fatal("Error pinging database", zap.Error(err))
-	}
+// 	logger.Debug("Complete database connection URL", zap.String("raw_url", parsedURL.String()))
+// 	db, err = sql.Open("pgx", parsedURL.String())
+// 	if err != nil {
+// 		logger.Fatal("Error connecting to database", zap.Error(err))
+// 	}
+// 	// Limit max time allowed across database ping and version fetch to 15 seconds total.
+// 	pingCtx, pingCtxCancelFn := context.WithTimeout(ctx, 15*time.Second)
+// 	defer pingCtxCancelFn()
+// 	if err = db.PingContext(pingCtx); err != nil {
+// 		if strings.HasSuffix(err.Error(), "does not exist (SQLSTATE 3D000)") {
+// 			logger.Fatal("Database schema not found, run `nakama migrate up`", zap.Error(err))
+// 		}
+// 		logger.Fatal("Error pinging database", zap.Error(err))
+// 	}
 
-	// db.SetConnMaxLifetime(time.Millisecond * time.Duration(config.GetDatabase().ConnMaxLifetimeMs))
-	// db.SetMaxOpenConns(config.GetDatabase().MaxOpenConns)
-	// db.SetMaxIdleConns(config.GetDatabase().MaxIdleConns)
-	db.SetConnMaxLifetime(time.Millisecond * connMaxLifetime)
-	db.SetMaxOpenConns(maxOpenConns)
-	db.SetMaxIdleConns(maxIdleConns)
+// 	// db.SetConnMaxLifetime(time.Millisecond * time.Duration(config.GetDatabase().ConnMaxLifetimeMs))
+// 	// db.SetMaxOpenConns(config.GetDatabase().MaxOpenConns)
+// 	// db.SetMaxIdleConns(config.GetDatabase().MaxIdleConns)
+// 	db.SetConnMaxLifetime(time.Millisecond * connMaxLifetime)
+// 	db.SetMaxOpenConns(maxOpenConns)
+// 	db.SetMaxIdleConns(maxIdleConns)
 
-	var dbVersion string
-	if err = db.QueryRowContext(pingCtx, "SELECT version()").Scan(&dbVersion); err != nil {
-		logger.Fatal("Error querying database version", zap.Error(err))
-	}
+// 	var dbVersion string
+// 	if err = db.QueryRowContext(pingCtx, "SELECT version()").Scan(&dbVersion); err != nil {
+// 		logger.Fatal("Error querying database version", zap.Error(err))
+// 	}
 
-	logger.Info("Database information", zap.String("version", dbVersion))
-	if strings.Split(dbVersion, " ")[0] == "CockroachDB" {
-		isCockroach = true
-	} else {
-		isCockroach = false
-	}
+// 	logger.Info("Database information", zap.String("version", dbVersion))
+// 	if strings.Split(dbVersion, " ")[0] == "CockroachDB" {
+// 		isCockroach = true
+// 	} else {
+// 		isCockroach = false
+// 	}
 
-	// Periodically check database hostname for underlying address changes.
-	go func() {
-		// ticker := time.NewTicker(time.Duration(config.GetDatabase().DnsScanIntervalSec) * time.Second)
-		ticker := time.NewTicker(60 * time.Second)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				newResolvedAddr, newResolvedAddrMap := dbResolveAddress(ctx, logger, dbHostname)
-				if len(resolvedAddr) == 0 {
-					// Could only happen when initial resolve above failed, and all resolves since have also failed.
-					// Trust the database driver in this case.
-					resolvedAddr = newResolvedAddr
-					resolvedAddrMap = newResolvedAddrMap
-					break
-				}
-				if len(newResolvedAddr) == 0 {
-					// New addresses failed to resolve, but had previous ones. Trust the database driver in this case.
-					break
-				}
+// 	// Periodically check database hostname for underlying address changes.
+// 	go func() {
+// 		// ticker := time.NewTicker(time.Duration(config.GetDatabase().DnsScanIntervalSec) * time.Second)
+// 		ticker := time.NewTicker(60 * time.Second)
+// 		for {
+// 			select {
+// 			case <-ctx.Done():
+// 				return
+// 			case <-ticker.C:
+// 				newResolvedAddr, newResolvedAddrMap := dbResolveAddress(ctx, logger, dbHostname)
+// 				if len(resolvedAddr) == 0 {
+// 					// Could only happen when initial resolve above failed, and all resolves since have also failed.
+// 					// Trust the database driver in this case.
+// 					resolvedAddr = newResolvedAddr
+// 					resolvedAddrMap = newResolvedAddrMap
+// 					break
+// 				}
+// 				if len(newResolvedAddr) == 0 {
+// 					// New addresses failed to resolve, but had previous ones. Trust the database driver in this case.
+// 					break
+// 				}
 
-				// Check for any changes in the resolved addresses.
-				drain := len(resolvedAddrMap) != len(newResolvedAddrMap)
-				if !drain {
-					for addr := range newResolvedAddrMap {
-						if _, found := resolvedAddrMap[addr]; !found {
-							drain = true
-							break
-						}
-					}
-				}
-				if !drain {
-					// No changes.
-					break
-				}
+// 				// Check for any changes in the resolved addresses.
+// 				drain := len(resolvedAddrMap) != len(newResolvedAddrMap)
+// 				if !drain {
+// 					for addr := range newResolvedAddrMap {
+// 						if _, found := resolvedAddrMap[addr]; !found {
+// 							drain = true
+// 							break
+// 						}
+// 					}
+// 				}
+// 				if !drain {
+// 					// No changes.
+// 					break
+// 				}
 
-				startTime := time.Now().UTC()
-				logger.Warn("Database starting rotation of all connections due to address change",
-					zap.Int("count", maxIdleConns),
-					zap.Strings("previous", resolvedAddr),
-					zap.Strings("updated", newResolvedAddr))
+// 				startTime := time.Now().UTC()
+// 				logger.Warn("Database starting rotation of all connections due to address change",
+// 					zap.Int("count", maxIdleConns),
+// 					zap.Strings("previous", resolvedAddr),
+// 					zap.Strings("updated", newResolvedAddr))
 
-				// Changes found. Drain the pool and allow the database driver to open fresh connections.
-				// Rely on the database driver to re-do its own hostname to address resolution.
-				var acquired int
-				conns := make([]*sql.Conn, 0, maxOpenConns)
-				for acquired < maxOpenConns {
-					acquired++
-					conn, err := db.Conn(ctx)
-					if err != nil {
-						if err == context.Canceled {
-							// Server shutting down.
-							return
-						}
-						// Log errors acquiring connections, but proceed without the failed connection anyway.
-						logger.Error("Error acquiring database connection", zap.Error(err))
-						continue
-					}
-					conns = append(conns, conn)
-				}
+// 				// Changes found. Drain the pool and allow the database driver to open fresh connections.
+// 				// Rely on the database driver to re-do its own hostname to address resolution.
+// 				var acquired int
+// 				conns := make([]*sql.Conn, 0, maxOpenConns)
+// 				for acquired < maxOpenConns {
+// 					acquired++
+// 					conn, err := db.Conn(ctx)
+// 					if err != nil {
+// 						if err == context.Canceled {
+// 							// Server shutting down.
+// 							return
+// 						}
+// 						// Log errors acquiring connections, but proceed without the failed connection anyway.
+// 						logger.Error("Error acquiring database connection", zap.Error(err))
+// 						continue
+// 					}
+// 					conns = append(conns, conn)
+// 				}
 
-				resolvedAddr = newResolvedAddr
-				resolvedAddrMap = newResolvedAddrMap
-				for _, conn := range conns {
-					if err := conn.Raw(func(driverConn interface{}) error {
-						pgc, ok := driverConn.(*stdlib.Conn)
-						if !ok {
-							return ErrDatabaseDriverMismatch
-						}
-						if err := pgc.Close(); err != nil {
-							return err
-						}
-						return nil
-					}); err != nil {
-						logger.Error("Error closing database connection", zap.Error(err))
-					}
-					if err := conn.Close(); err != nil {
-						logger.Error("Error releasing database connection", zap.Error(err))
-					}
-				}
+// 				resolvedAddr = newResolvedAddr
+// 				resolvedAddrMap = newResolvedAddrMap
+// 				for _, conn := range conns {
+// 					if err := conn.Raw(func(driverConn interface{}) error {
+// 						pgc, ok := driverConn.(*stdlib.Conn)
+// 						if !ok {
+// 							return ErrDatabaseDriverMismatch
+// 						}
+// 						if err := pgc.Close(); err != nil {
+// 							return err
+// 						}
+// 						return nil
+// 					}); err != nil {
+// 						logger.Error("Error closing database connection", zap.Error(err))
+// 					}
+// 					if err := conn.Close(); err != nil {
+// 						logger.Error("Error releasing database connection", zap.Error(err))
+// 					}
+// 				}
 
-				logger.Warn("Database finished rotation of all connections due to address change",
-					zap.Int("count", len(conns)),
-					zap.Strings("previous", resolvedAddr),
-					zap.Strings("updated", newResolvedAddr),
-					zap.Duration("elapsed_duration", time.Now().UTC().Sub(startTime)))
-			}
-		}
-	}()
+// 				logger.Warn("Database finished rotation of all connections due to address change",
+// 					zap.Int("count", len(conns)),
+// 					zap.Strings("previous", resolvedAddr),
+// 					zap.Strings("updated", newResolvedAddr),
+// 					zap.Duration("elapsed_duration", time.Now().UTC().Sub(startTime)))
+// 			}
+// 		}
+// 	}()
 
-	return db
-}
+// 	return db
+// }
 
 func dbResolveAddress(ctx context.Context, logger *zap.Logger, host string) ([]string, map[string]struct{}) {
 	resolveCtx, resolveCtxCancelFn := context.WithTimeout(ctx, 15*time.Second)

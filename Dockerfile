@@ -34,6 +34,9 @@ COPY --from=builder /nakama/custom-nakama /nakama/custom-nakama
 # Copy migration files
 COPY --from=builder /app/migrate /nakama/migrate
 
+# Copy nakama.yml config
+COPY --from=builder /app/nakama.yml /nakama/nakama.yml
+
 # Create data directory
 RUN mkdir -p /nakama/data
 
@@ -52,6 +55,5 @@ EXPOSE 7349 7350
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:7350/ || exit 1
 
-# Run Nakama server directly (no migration in entrypoint for production)
-# Migration should be run as a separate Job in Kubernetes/OpenShift
-ENTRYPOINT ["/nakama/custom-nakama"]
+# Run Nakama server with nakama.yml config
+ENTRYPOINT ["/nakama/custom-nakama", "--config", "/nakama/nakama.yml"]

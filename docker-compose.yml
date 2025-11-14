@@ -1,4 +1,4 @@
-name: custom-nakama
+version: '3.8'
 
 services:
   postgres:
@@ -58,7 +58,7 @@ services:
     container_name: custom-nakama-server
     build:
       context: .
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
     image: nakama-custom:latest
     pull_policy: never
     ports:
@@ -77,6 +77,19 @@ services:
       - DB_HOST=pgbouncer
       - DB_PORT=5432
       - DB_SSLMODE=disable
+      
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=PVzppFXsDTIJHwYWziXmpItGKVZQCvQW
+
+      - DB_NAME_1=railway
+      - DB_SCHEMA_1=sook-app
+      - TENANT_ID_1=tenant_id_for_one_bangkok_aAdweds2341SFvwe222
+      - TENANT_API_KEY_1=api_key_for_tenant_one_bangkok_eASmCjXhaakpSlpH0JQlaOaLTcuJJRd8
+
+      - DB_NAME_2=sook
+      - DB_SCHEMA_2=public
+      - TENANT_ID_2=tenant_id_for_gateway_bangsue_aAdweds2341SFvwe333
+      - TENANT_API_KEY_2=api_key_for_tenant_gateway_bangsue_hO9uMZT2W0CIVdHNuhvtnmRc4G62Giw9
       # Nakama config overrides
       - NAKAMA_DATABASE__ADDRESS=postgres:localdb@pgbouncer:5432/custom-nakama?sslmode=disable
       - NAKAMA_LOGGER__LEVEL=info
@@ -88,5 +101,38 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    container_name: nakama-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: nakama-minio-init
+    depends_on:
+      - minio
+    restart: "no"
+    entrypoint: /bin/sh
+    command: >
+      -c "sleep 10 &&
+      mc alias set myminio http://minio:9000 minioadmin minioadmin &&
+      mc mb myminio/chat-uploads --ignore-existing &&
+      mc anonymous set download myminio/chat-uploads &&
+      echo 'MinIO bucket setup complete'"
+
 volumes:
   data:
+  minio_data:
