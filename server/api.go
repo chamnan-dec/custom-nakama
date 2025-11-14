@@ -231,6 +231,7 @@ func StartApiServer(logger *zap.Logger, startupLogger *zap.Logger, protojsonMars
 	// Register your presign route here (bypasses gRPC; handled by our custom handler).
 	if presignService != nil {
 		grpcGatewayMux.HandleFunc("/v2/presign/upload", presignService.PresignUploadHandler()).Methods(http.MethodPost)
+		grpcGatewayMux.HandleFunc("/v2/presign/get", presignService.GetPresignHandler()).Methods(http.MethodGet)
 	}
 
 	grpcGatewayMux.NewRoute().Handler(grpcGateway)

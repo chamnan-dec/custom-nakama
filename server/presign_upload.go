@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -39,7 +40,7 @@ type presignUploadRequest struct {
 	Filename    string `json:"filename,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	PathPrefix  string `json:"path_prefix,omitempty"`
-	ChatID      string `json:"chat_id,omitempty"`
+	ChannelID   string `json:"channel_id,omitempty"`
 }
 
 type presignUploadResponse struct {
@@ -47,7 +48,14 @@ type presignUploadResponse struct {
 	Headers   map[string]string `json:"headers,omitempty"`
 	ObjectKey string            `json:"object_key"`
 	ExpiresIn int64             `json:"expires_in"`
+	ChannelID string            `json:"channel_id"`
 	//PublicURL string            `json:"public_url,omitempty"`
+}
+
+type presignGetResponse struct {
+	Method     string            `json:"method"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	PresignURL string            `json:"presignURL"`
 }
 
 // NewPresignServiceFromEnv initializes MinIO client from environment variables.
@@ -104,6 +112,46 @@ func NewPresignServiceFromEnv() (*PresignService, error) {
 	}, nil
 }
 
+func (s *PresignService) GetPresignHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		channelID := r.URL.Query().Get("channel_id")
+		if channelID == "" {
+			http.Error(w, "channel_id required", http.StatusBadRequest)
+			return
+		}
+		objectKey := r.URL.Query().Get("object_key")
+		if objectKey == "" {
+			http.Error(w, "object_key required", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, fmt.Sprintf("chats/%s/%s", channelID, objectKey), s.expiry, nil)
+		if err != nil {
+			http.Error(w, "could not generate presigned URL", http.StatusBadRequest)
+			return
+		}
+
+		// Suggested headers for the upload request (client-side).
+		headers := map[string]string{}
+
+		resp := presignGetResponse{
+			Method:     "GET",
+			Headers:    headers,
+			PresignURL: presignedURL.String(),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
 // PresignUploadHandler returns a presigned PUT UploadURL for direct upload to MinIO.
 func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -128,22 +176,24 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 		u := uuid.New().String()
 		datePrefix := time.Now().UTC().Format("2006/01/02")
 		var keyParts []string
+
 		if p := strings.Trim(req.PathPrefix, "/"); p != "" {
 			keyParts = append(keyParts, p)
 		}
 		keyParts = append(keyParts, datePrefix, u+"-"+filename)
 
-		if cid := sanitizeID(req.ChatID); cid != "" {
-			keyParts = append(keyParts, "chats", cid)
-		}
-
 		objectKey := path.Clean(strings.Join(keyParts, "/"))
+
+		objectInnerKey := objectKey
+		if cid := sanitizeID(req.ChannelID); cid != "" {
+			objectInnerKey = fmt.Sprintf("chats/%s/%s", cid, objectKey)
+		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
 		// Generate presigned PUT UploadURL.
-		url, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, s.expiry)
+		url, err := s.client.PresignedPutObject(ctx, s.bucket, objectInnerKey, s.expiry)
 		if err != nil {
 			http.Error(w, "failed to presign", http.StatusInternalServerError)
 			return
@@ -160,6 +210,7 @@ func (s *PresignService) PresignUploadHandler() http.HandlerFunc {
 			Headers:   headers,
 			ObjectKey: objectKey,
 			ExpiresIn: int64(s.expiry.Seconds()),
+			ChannelID: req.ChannelID,
 			//PublicURL: s.buildPublicURL(objectKey),
 		}
 
