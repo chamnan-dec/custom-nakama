@@ -25,9 +25,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/jackc/pgx/v5/stdlib" // Blank import to register SQL driver
 	"github.com/thaibev/nakama/v3/internal/auth"
 	"github.com/thaibev/nakama/v3/internal/config"
+	"github.com/thaibev/nakama/v3/migrate"
 	"github.com/thaibev/nakama/v3/server"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -57,16 +59,83 @@ type DBConfig struct {
 	APIKey string
 }
 
-// Map ใช้ TenantID เป็น key
-var dbConfigs = map[string]DBConfig{
-	"tenant_id_for_one_bangkok_aAdweds2341SFvwe222": {
-		DBURL:  "postgresql://postgres:PVzppFXsDTIJHwYWziXmpItGKVZQCvQW@shinkansen.proxy.rlwy.net:37342/railway?sslmode=require&options=-c%20search_path=sook-app",
-		APIKey: "api_key_for_tenant_one_bangkok_eASmCjXhaakpSlpH0JQlaOaLTcuJJRd8",
-	},
-	"tenant_id_for_gateway_bangsue_aAdweds2341SFvwe333": {
-		DBURL:  "postgresql://postgres:aaRGhDJRtiHyJhcXntEnyWvyQRenkGXQ@mainline.proxy.rlwy.net:16983/sook?sslmode=require&options=-c%20search_path=public",
-		APIKey: "api_key_for_tenant_gateway_bangsue_hO9uMZT2W0CIVdHNuhvtnmRc4G62Giw9",
-	},
+func getDbConfigs() map[string]DBConfig {
+	// Check if running in Docker (environment variable set)
+	dbUsername := os.Getenv("DB_USERNAME")
+	if dbUsername == "" {
+		dbUsername = "postgres" // Default for local development
+	}
+
+	dbPassword := os.Getenv("DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "password" // Default for local development
+	}
+
+	dbName1 := os.Getenv("DB_NAME_1")
+	if dbName1 == "" {
+		dbName1 = "railway" // Default for local development
+	}
+
+	dbSchema1 := os.Getenv("DB_SCHEMA_1")
+	if dbSchema1 == "" {
+		dbSchema1 = "public" // Default for local development
+	}
+
+	tenantID1 := os.Getenv("TENANT_ID_1")
+	if tenantID1 == "" {
+		tenantID1 = "xxxx" // Default for local development
+	}
+
+	tenantAPIKey1 := os.Getenv("TENANT_API_KEY_1")
+	if tenantAPIKey1 == "" {
+		tenantAPIKey1 = "xxxx" // Default for local development
+	}
+
+	dbName2 := os.Getenv("DB_NAME_2")
+	if dbName2 == "" {
+		dbName2 = "railway2" // Default for local development
+	}
+
+	dbSchema2 := os.Getenv("DB_SCHEMA_2")
+	if dbSchema2 == "" {
+		dbSchema2 = "public2" // Default for local development
+	}
+
+	tenantID2 := os.Getenv("TENANT_ID_2")
+	if tenantID2 == "" {
+		tenantID2 = "xxxx" // Default for local development
+	}
+
+	tenantAPIKey2 := os.Getenv("TENANT_API_KEY_2")
+	if tenantAPIKey2 == "" {
+		tenantAPIKey2 = "xxxx" // Default for local development
+	}
+
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost" // Default for local development
+	}
+
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "6432" // Default PgBouncer port
+	}
+
+	dbSSLMode := os.Getenv("DB_SSLMODE")
+	if dbSSLMode == "" {
+		dbSSLMode = "disable" // Default for local development
+	}
+
+	return map[string]DBConfig{
+		tenantID1: {
+			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName1, dbSSLMode, dbSchema1),
+			APIKey: tenantAPIKey1,
+		},
+		tenantID2: {
+			DBURL:  fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&search_path=%s", dbUsername, dbPassword, dbHost, dbPort, dbName2, dbSSLMode, dbSchema2),
+			APIKey: tenantAPIKey2,
+		},
+	}
 }
 
 func main() {
@@ -78,7 +147,60 @@ func main() {
 
 	tmpLogger := server.NewJSONLogger(os.Stdout, zapcore.InfoLevel, server.JSONFormat)
 
-	_, ctxCancelFn := context.WithCancel(context.Background())
+	ctx, ctxCancelFn := context.WithCancel(context.Background())
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version":
+			fmt.Println(semver)
+			return
+		case "migrate":
+			config := config.ParseArgs(tmpLogger, os.Args[2:])
+
+			// Run migration for all configured databases
+			for dbName := range getDbConfigs() {
+				tmpLogger.Info("Running migration for database", zap.String("db", dbName))
+
+				db, err := server.GetDB(dbName)
+				if err != nil {
+					tmpLogger.Fatal("Failed to get db pool for migration", zap.String("db", dbName), zap.Error(err))
+				}
+
+				conn, err := db.Conn(ctx)
+				if err != nil {
+					db.Close()
+					tmpLogger.Fatal("Failed to acquire db conn for migration", zap.String("db", dbName), zap.Error(err))
+				}
+
+				if err = conn.Raw(func(driverConn any) error {
+					pgxConn := driverConn.(*stdlib.Conn).Conn()
+					migrate.RunCmd(ctx, tmpLogger, pgxConn, os.Args[2], config.GetLimit(), config.GetLogger().Format)
+					return nil
+				}); err != nil {
+					conn.Close()
+					db.Close()
+					tmpLogger.Fatal("Failed to acquire pgx conn for migration", zap.String("db", dbName), zap.Error(err))
+				}
+
+				conn.Close()
+				db.Close()
+				tmpLogger.Info("Migration completed for database", zap.String("db", dbName))
+			}
+			return
+		case "healthcheck":
+			port := "7350"
+			if len(os.Args) > 2 {
+				port = os.Args[2]
+			}
+
+			resp, err := http.Get("http://localhost:" + port)
+			if err != nil || resp.StatusCode != http.StatusOK {
+				tmpLogger.Fatal("healthcheck failed")
+			}
+			tmpLogger.Info("healthcheck ok")
+			return
+		}
+	}
 
 	config := config.ParseArgs(tmpLogger, os.Args)
 	logger, startupLogger := server.SetupLogging(tmpLogger, config)
@@ -86,7 +208,7 @@ func main() {
 	auth.InitTokenManager(config.GetAuth())
 	tokenManager := auth.GetManager()
 
-	for tenantID, cfg := range dbConfigs {
+	for tenantID, cfg := range getDbConfigs() {
 		if err := tokenManager.SetupDBPool(tenantID, cfg.DBURL, cfg.APIKey); err != nil {
 			log.Fatalf("failed to setup DB pool for tenant %s: %v", tenantID, err)
 		}
