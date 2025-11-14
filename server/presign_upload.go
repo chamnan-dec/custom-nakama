@@ -50,6 +50,19 @@ type presignUploadResponse struct {
 	//PublicURL string            `json:"public_url,omitempty"`
 }
 
+type presignGetRequest struct {
+	ChannelID   string `json:"channel_id,omitempty"`
+	ObjectKey   string `json:"object_key"`
+	ContentType string `json:"content_type,omitempty"`
+	PathPrefix  string `json:"path_prefix,omitempty"`
+}
+
+type presignGetResponse struct {
+	Method     string            `json:"method"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	PresignURL string            `json:"presignURL"`
+}
+
 // NewPresignServiceFromEnv initializes MinIO client from environment variables.
 // Required: MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET
 func NewPresignServiceFromEnv() (*PresignService, error) {
@@ -102,6 +115,44 @@ func NewPresignServiceFromEnv() (*PresignService, error) {
 		expiry:        time.Duration(expirySec) * time.Second,
 		publicBaseURL: publicBaseURL,
 	}, nil
+}
+
+func (s *PresignService) GetPresignHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req presignGetRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, fmt.Sprintf("%s/%s", req.ChannelID, req.ObjectKey), s.expiry, nil)
+		if err != nil {
+			http.Error(w, "could not generate presigned URL", http.StatusBadRequest)
+			return
+		}
+
+		// Suggested headers for the upload request (client-side).
+		headers := map[string]string{}
+		if ct := strings.TrimSpace(req.ContentType); ct != "" {
+			headers["Content-Type"] = ct
+		}
+
+		resp := presignGetResponse{
+			Method:     "GET",
+			Headers:    headers,
+			PresignURL: presignedURL.String(),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
 }
 
 // PresignUploadHandler returns a presigned PUT UploadURL for direct upload to MinIO.
