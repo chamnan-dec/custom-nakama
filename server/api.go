@@ -84,7 +84,7 @@ type ApiServer struct {
 	grpcGatewayServer *http.Server
 }
 
-func StartApiServer(logger *zap.Logger, startupLogger *zap.Logger, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, config Config, version string, sessionRegistry SessionRegistry, sessionCache SessionCache, statusRegistry StatusRegistry, tracker Tracker, router MessageRouter, streamManager StreamManager, metrics Metrics, pipeline *Pipeline) *ApiServer {
+func StartApiServer(logger *zap.Logger, startupLogger *zap.Logger, protojsonMarshaler *protojson.MarshalOptions, protojsonUnmarshaler *protojson.UnmarshalOptions, config Config, version string, sessionRegistry SessionRegistry, sessionCache SessionCache, statusRegistry StatusRegistry, tracker Tracker, router MessageRouter, streamManager StreamManager, metrics Metrics, pipeline *Pipeline, presignService *PresignService) *ApiServer {
 	var gatewayContextTimeoutMs string
 	if config.GetSocket().IdleTimeoutMs > 500 {
 		// Ensure the GRPC Gateway timeout is just under the idle timeout (if possible) to ensure it has priority.
@@ -227,6 +227,13 @@ func StartApiServer(logger *zap.Logger, startupLogger *zap.Logger, protojsonMars
 	// 	}
 	// 	logger.Info("Registered custom HTTP handler", zap.String("path_pattern", handler.PathPattern))
 	// }
+
+	// Register your presign route here (bypasses gRPC; handled by our custom handler).
+	if presignService != nil {
+		grpcGatewayMux.HandleFunc("/v2/presign/upload", presignService.PresignUploadHandler()).Methods(http.MethodPost)
+		grpcGatewayMux.HandleFunc("/v2/presign/get", presignService.GetPresignHandler()).Methods(http.MethodGet)
+	}
+
 	grpcGatewayMux.NewRoute().Handler(grpcGateway)
 
 	// Enable stats recording on all request paths except:

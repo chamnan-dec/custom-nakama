@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib" // Blank import to register SQL driver
+	"github.com/joho/godotenv"
 	"github.com/thaibev/nakama/v3/migrate"
 	"github.com/thaibev/nakama/v3/server"
 	"go.uber.org/zap"
@@ -71,6 +73,13 @@ func getDbConfigs() map[string]string {
 	return map[string]string{
 		"region_a": fmt.Sprintf("postgresql://postgres:localdb@%s:%s/custom-nakama?sslmode=%s", dbHost, dbPort, dbSSLMode),
 		"region_b": fmt.Sprintf("postgresql://postgres:localdb@%s:%s/custom-nakama?sslmode=%s", dbHost, dbPort, dbSSLMode),
+	}
+}
+
+func init() {
+	// Load .env file (ignore error if file doesn't exist in production)
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
 	}
 }
 
@@ -161,9 +170,15 @@ func main() {
 	router := server.NewLocalMessageRouter(sessionRegistry, tracker, jsonpbMarshaler)
 	streamManager := server.NewLocalStreamManager(config, sessionRegistry, tracker)
 
+	// Initialize presign service
+	presignService, err := server.NewPresignServiceFromEnv()
+	if err != nil {
+		logger.Fatal("Failed to initialize presign service", zap.Error(err))
+	}
+
 	pipeline := server.NewPipeline(logger, config, jsonpbMarshaler, jsonpbUnmarshaler, sessionRegistry, statusRegistry, tracker, router)
 
-	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline)
+	apiServer := server.StartApiServer(logger, startupLogger, jsonpbMarshaler, jsonpbUnmarshaler, config, version, sessionRegistry, sessionCache, statusRegistry, tracker, router, streamManager, metrics, pipeline, presignService)
 
 	// Respect OS stop signals.
 	c := make(chan os.Signal, 2)
