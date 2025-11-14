@@ -12,6 +12,7 @@ services:
       - POSTGRES_INITDB_ARGS=--auth-host=md5
     volumes:
       - data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     expose:
@@ -79,14 +80,14 @@ services:
       - DB_SSLMODE=disable
       
       - DB_USERNAME=postgres
-      - DB_PASSWORD=PVzppFXsDTIJHwYWziXmpItGKVZQCvQW
+      - DB_PASSWORD=localdb
 
-      - DB_NAME_1=railway
-      - DB_SCHEMA_1=sook-app
+      - DB_NAME_1=fraser
+      - DB_SCHEMA_1=public
       - TENANT_ID_1=tenant_id_for_one_bangkok_aAdweds2341SFvwe222
       - TENANT_API_KEY_1=api_key_for_tenant_one_bangkok_eASmCjXhaakpSlpH0JQlaOaLTcuJJRd8
 
-      - DB_NAME_2=sook
+      - DB_NAME_2=awc
       - DB_SCHEMA_2=public
       - TENANT_ID_2=tenant_id_for_gateway_bangsue_aAdweds2341SFvwe333
       - TENANT_API_KEY_2=api_key_for_tenant_gateway_bangsue_hO9uMZT2W0CIVdHNuhvtnmRc4G62Giw9
