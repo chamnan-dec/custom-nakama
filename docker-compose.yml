@@ -1,6 +1,93 @@
 version: '3.8'
 
 services:
+  postgres:
+    container_name: custom-nakama-postgres
+    image: postgres:16.8-alpine
+    command: postgres -c password_encryption=md5
+    environment:
+      - POSTGRES_DB=custom-nakama
+      - POSTGRES_PASSWORD=localdb
+      - POSTGRES_HOST_AUTH_METHOD=md5
+      - POSTGRES_INITDB_ARGS=--auth-host=md5
+    volumes:
+      - data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "custom-nakama"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  pgbouncer:
+    container_name: custom-nakama-pgbouncer
+    image: edoburu/pgbouncer:latest
+    environment:
+      # Required base config
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=localdb
+      # Wildcard config allows any database name to be created dynamically
+      - DB_NAME=*
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=25
+      - MIN_POOL_SIZE=5
+      - RESERVE_POOL_SIZE=5
+      - SERVER_IDLE_TIMEOUT=600
+      - MAX_DB_CONNECTIONS=100
+      - AUTH_TYPE=trust
+    ports:
+      - "6432:5432"
+    expose:
+      - "5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  nakama:
+    container_name: custom-nakama-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nakama-custom:latest
+    pull_policy: never
+    ports:
+      - "7349:7349"  
+      - "7350:7350"
+      - "7351:7351"
+    expose:
+      - "7349"
+      - "7350"
+      - "7351"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    environment:
+      # Database connection for multi-region pool in main.go
+      - DB_HOST=pgbouncer
+      - DB_PORT=5432
+      - DB_SSLMODE=disable
+      # Nakama config overrides
+      - NAKAMA_DATABASE__ADDRESS=postgres:localdb@pgbouncer:5432/custom-nakama?sslmode=disable
+      - NAKAMA_LOGGER__LEVEL=info
+      - NAKAMA_SOCKET__PORT=7350
+      - NAKAMA_SESSION__TOKEN_EXPIRY_SEC=60
+    healthcheck:
+      test: ["CMD", "/nakama/custom-nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   minio:
     image: minio/minio:latest
     container_name: nakama-minio
@@ -14,7 +101,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -27,13 +114,12 @@ services:
     restart: "no"
     entrypoint: /bin/sh
     command: >
-      -c "
-      sleep 10 &&
+      -c "sleep 10 &&
       mc alias set myminio http://minio:9000 minioadmin minioadmin &&
       mc mb myminio/chat-uploads --ignore-existing &&
       mc anonymous set download myminio/chat-uploads &&
-      echo 'MinIO bucket setup complete'
-      "
+      echo 'MinIO bucket setup complete'"
 
 volumes:
+  data:
   minio_data:
